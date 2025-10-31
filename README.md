@@ -8,14 +8,19 @@
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-SOL Circle enables collaborative trading through Telegram groups with multi-party computation (MPC) powered confidential transactions. Coordinate with your community, vote on proposals, and execute trades while preserving financial privacy .
+SOL Circle enables collaborative trading through Telegram groups with multi-party computation (MPC) powered confidential transactions. Coordinate with your community, vote on proposals, and execute trades while preserving financial privacy.
+
 ## Demo Video
 
-Watch the SOL Circle demo:
+**[▶️ Watch the SOL Circle Demo on YouTube](https://www.youtube.com/watch?v=QcQZ7FY7YNM)**
 
-[![SOL Circle Demo](https://img.youtube.com/vi/QcQZ7FY7YNM/0.jpg)](https://www.youtube.com/watch?v=QcQZ7FY7YNM)
+<div align="center">
+  <a href="https://www.youtube.com/watch?v=QcQZ7FY7YNM">
+    <img src="https://img.youtube.com/vi/QcQZ7FY7YNM/maxresdefault.jpg" alt="SOL Circle Demo" width="600">
+  </a>
+  <p><em>Click to watch the full demo video</em></p>
+</div>
 
-<iframe  src="https://www.youtube.com/embed/QcQZ7FY7YNM" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
 ---
 
 ## Features
@@ -47,6 +52,13 @@ Watch the SOL Circle demo:
 ---
 
 ## Architecture
+
+<div align="center">
+  <img src="Arcium/system_architecture.png" alt="SOL Circle System Architecture" width="800">
+  <p><em>Complete system architecture showing the integration between Telegram, Backend, Solana blockchain, and Arcium MPC network</em></p>
+</div>
+
+### High-Level Overview
 
 ```
 ┌─────────────────┐
