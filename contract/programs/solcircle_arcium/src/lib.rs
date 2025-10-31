@@ -42,6 +42,71 @@ pub mod sol_circle {
         Ok(())
     }
 
+    // ========================================================================
+    // HELLO-WORLD EXAMPLE (for tests): add_together
+    // Wires the encrypted-ixs `add_together` circuit so the existing
+    // TypeScript test `tests/solcircle_arcium.ts` can run unchanged.
+    // ========================================================================
+
+    /// Initialize computation definition for `add_together`
+    pub fn init_add_together_comp_def(
+        ctx: Context<InitAddTogetherCompDef>,
+    ) -> Result<()> {
+        // Store circuit on-chain (small demo circuit)
+        // For bigger circuits consider OffChainCircuitSource per Arcium docs
+        init_comp_def(ctx.accounts, true, 0, None, None)?;
+        Ok(())
+    }
+
+    /// Queue encrypted computation for `add_together`
+    pub fn add_together(
+        ctx: Context<AddTogether>,
+        computation_offset: u64,
+        ciphertext_0: [u8; 32],
+        ciphertext_1: [u8; 32],
+        pub_key: [u8; 32],
+        nonce: u128,
+    ) -> Result<()> {
+        // Arguments expected by the `add_together` circuit (see encrypted-ixs)
+        let args = vec![
+            Argument::ArcisPubkey(pub_key),
+            Argument::PlaintextU128(nonce),
+            Argument::EncryptedU8(ciphertext_0),
+            Argument::EncryptedU8(ciphertext_1),
+        ];
+
+        // Required by Arcium account signer PDA
+        ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
+
+        // Queue the computation and specify the callback to be invoked
+        queue_computation(
+            ctx.accounts,
+            computation_offset,
+            args,
+            None,
+            vec![AddTogetherCallback::callback_ix(&[])],
+        )?;
+        Ok(())
+    }
+
+    /// Callback for `add_together` returning the encrypted sum and nonce
+    #[arcium_callback(encrypted_ix = "add_together")]
+    pub fn add_together_callback(
+        ctx: Context<AddTogetherCallback>,
+        output: ComputationOutputs<AddTogetherOutput>,
+    ) -> Result<()> {
+        let o = match output {
+            ComputationOutputs::Success(AddTogetherOutput { field_0: o }) => o,
+            _ => return Err(ErrorCode::MpcComputationFailed.into()),
+        };
+
+        emit!(SumEvent {
+            sum: o.ciphertexts[0],
+            nonce: o.nonce.to_le_bytes(),
+        });
+        Ok(())
+    }
+
     /// Update oracle public key (authority only)
     pub fn update_oracle(ctx: Context<UpdateOracle>, new_oracle_pubkey: Pubkey) -> Result<()> {
         ctx.accounts.oracle_config.oracle_pubkey = new_oracle_pubkey;
@@ -776,6 +841,32 @@ pub enum MpcRequestStatus {
 }
 
 // ========================================================================
+// ACCOUNTS FOR add_together DEMO (macros expand required Arcium accounts)
+// ========================================================================
+
+#[queue_computation_accounts("add_together", payer)]
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct AddTogether<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+}
+
+#[callback_accounts("add_together", payer)]
+#[derive(Accounts)]
+pub struct AddTogetherCallback<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+}
+
+#[init_computation_definition_accounts("add_together", payer)]
+#[derive(Accounts)]
+pub struct InitAddTogetherCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+}
+
+// ========================================================================
 // CONTEXT STRUCTURES - PUBLIC
 // ========================================================================
 
@@ -1377,4 +1468,14 @@ pub enum ErrorCode {
 
     #[msg("Transfer failed.")]
     TransferFailed,
+}
+
+// ========================================================================
+// EVENTS
+// ========================================================================
+
+#[event]
+pub struct SumEvent {
+    pub sum: [u8; 32],
+    pub nonce: [u8; 16],
 }

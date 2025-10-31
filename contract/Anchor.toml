@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-solcircle_arcium = "4f8VLDf77efPqD2RmLZq2dmMAyi1BcgRTkmbUevzNbAw"
+solcircle_arcium = "CXsaoofHepCa6JT197g6PpzviF4H4adHrjRmekwT5vtL"
 
 [registry]
 url = "https://api.apr.dev"
