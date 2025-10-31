@@ -146,8 +146,8 @@ pub struct ConfidentialDepositCallback<'info> {
 
 For the complete architecture and implementation details, see the unified doc:
 
-- [`doc/ARCHITECTURE_AND_ARCIUM.md`](./doc/ARCHITECTURE.md)
-- [`doc/ARCHITECTURE_AND_ARCIUM.md`](./doc/ARCIUM_IMPLEMENTATION.md)
+- [`doc/ARCHITECTURE.md`](./doc/ARCHITECTURE.md)
+- [`doc/ARCIUM_IMPLEMENTATION.md`](./doc/ARCIUM_IMPLEMENTATION.md)
 
 ## Test notes
 
