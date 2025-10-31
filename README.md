@@ -1,4 +1,4 @@
-# SOL Circle
+# SolCircle
 
 > Decentralized social trading platform built on Solana with privacy-preserving dark pools
 
