@@ -1,0 +1,27 @@
+[package]
+name = "solcircle_arcium"
+version = "0.1.0"
+description = "Created with Arcium & Anchor"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "solcircle_arcium"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+anchor-spl = "0.31.1"
+arcium-client = { default-features = false, version = "0.3.0" }
+arcium-macros = "0.3.0"
+arcium-anchor = "0.3.0"
+encrypted-ixs = { path = "../../encrypted-ixs" }
+base64ct = "1.6.0"
+
