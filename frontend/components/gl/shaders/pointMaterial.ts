@@ -115,7 +115,13 @@ export class DofPointsMaterial extends THREE.ShaderMaterial {
         
         float alpha = (1.04 - clamp(vDistance, 0.0, 1.0)) * clamp(smoothstep(-0.5, 0.25, vPosY), 0.0, 1.0) * uOpacity * revealMask * uRevealProgress * sparkleBrightness;
 
-        gl_FragColor = vec4(vec3(1.0), mix(alpha, sparkleBrightness - 1.1, uTransition));
+        // Logo color: #9d4edd (brighter purple) with extra glow
+        vec3 logoColor = vec3(0.616, 0.306, 0.867); // RGB values for #9d4edd - brighter purple
+        
+        // Boost brightness for more glow effect
+        vec3 glowColor = logoColor * 1.8; // Increase brightness by 80%
+        
+        gl_FragColor = vec4(glowColor, mix(alpha, sparkleBrightness - 1.1, uTransition));
       }`,
       uniforms: {
         positions: { value: null },
@@ -131,7 +137,7 @@ export class DofPointsMaterial extends THREE.ShaderMaterial {
         uRevealProgress: { value: 0.0 }
       },
       transparent: true,
-      // blending: THREE.AdditiveBlending,
+      blending: THREE.AdditiveBlending,
       depthWrite: false
     })
   }

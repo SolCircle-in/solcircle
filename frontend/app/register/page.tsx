@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Wallet, Send, Check } from "lucide-react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 // removed Header import to hide it on this page
 import { GL } from "@/components/gl";
@@ -18,6 +20,8 @@ declare global {
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { publicKey, connected, connecting } = useWallet();
+  const { setVisible } = useWalletModal();
   const [step, setStep] = useState(1);
   const [walletAddress, setWalletAddress] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,10 +30,18 @@ export default function RegisterPage() {
   const tgContainerRef = useRef<HTMLDivElement | null>(null);
   const [hovering, setHovering] = useState(false);
 
+  // Update walletAddress when wallet connects
+  useEffect(() => {
+    if (publicKey) {
+      setWalletAddress(publicKey.toString());
+      setError("");
+    }
+  }, [publicKey]);
+
   useEffect(() => {
     window.onTelegramAuth = async (user: any) => {
       if (!walletAddress) {
-        setError("Please enter your Solana wallet address first!");
+        setError("Please connect your wallet first!");
         return;
       }
 
@@ -113,25 +125,17 @@ export default function RegisterPage() {
   }, [step]);
 
   const handleConnectWallet = async () => {
-    setLoading(true);
-    setError("");
-
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    if (!walletAddress.trim()) {
-      setError("Please enter a wallet address");
-      setLoading(false);
+    if (!connected) {
+      setVisible(true);
       return;
     }
 
-    if (walletAddress.length < 32 || walletAddress.length > 44) {
-      setError("Invalid Solana wallet address");
-      setLoading(false);
+    if (!publicKey) {
+      setError("Please connect your wallet");
       return;
     }
 
     setStep(2);
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -194,32 +198,42 @@ export default function RegisterPage() {
                 </div>
 
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold mb-3">
-                      Solana Wallet Address
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Enter your Solana wallet address"
-                      value={walletAddress}
-                      onChange={(e) => {
-                        setWalletAddress(e.target.value);
-                        setError("");
-                      }}
-                      className="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-                    />
-                    {error && (
-                      <p className="text-destructive text-sm mt-2">{error}</p>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={handleConnectWallet}
-                    disabled={loading}
-                    className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-bold hover:bg-primary/90 transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      {loading ? (
+                  {connected && publicKey ? (
+                    <div className="space-y-4">
+                      <div className="p-4 bg-card border border-border rounded-lg">
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Connected Wallet
+                        </p>
+                        <p className="font-mono text-sm break-all text-primary">
+                          {publicKey.toString()}
+                        </p>
+                      </div>
+                      
+                      <button
+                        onClick={handleConnectWallet}
+                        disabled={loading}
+                        className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-bold hover:bg-primary/90 transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {connecting ? (
+                          <>
+                            <span className="inline-block w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                            <span>Processing...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4" />
+                            <span>Continue to Telegram</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setVisible(true)}
+                      disabled={connecting}
+                      className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-bold hover:bg-primary/90 transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {connecting ? (
                         <>
                           <span className="inline-block w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
                           <span>Connecting...</span>
@@ -230,8 +244,12 @@ export default function RegisterPage() {
                           <span>Connect Wallet</span>
                         </>
                       )}
-                    </span>
-                  </button>
+                    </button>
+                  )}
+                  
+                  {error && (
+                    <p className="text-destructive text-sm">{error}</p>
+                  )}
                 </div>
 
                 <div className="p-4 bg-card border border-border rounded-lg">

@@ -9,7 +9,7 @@ export const Logo = ({ className }: { className?: string }) => {
         height={48}
         style={{ display: "inline-block", marginRight: 12 }}
       />
-      <span style={{ fontWeight: 500, fontSize: 20 }} className="font-mono">Solcirle</span>
+      <span style={{ fontWeight: 500, fontSize: 20 }} className="font-mono">SolCircle</span>
     </div>
   );
 };
