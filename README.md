@@ -8,8 +8,14 @@
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-SOL Circle enables collaborative trading through Telegram groups with multi-party computation (MPC) powered confidential transactions. Coordinate with your community, vote on proposals, and execute trades while preserving financial privacy.
+SOL Circle enables collaborative trading through Telegram groups with multi-party computation (MPC) powered confidential transactions. Coordinate with your community, vote on proposals, and execute trades while preserving financial privacy .
+## Demo Video
 
+Watch the SOL Circle demo:
+
+[![SOL Circle Demo](https://img.youtube.com/vi/QcQZ7FY7YNM/0.jpg)](https://www.youtube.com/watch?v=QcQZ7FY7YNM)
+
+<iframe  src="https://www.youtube.com/embed/QcQZ7FY7YNM" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
 ---
 
 ## Features
