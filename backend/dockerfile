@@ -1,0 +1,22 @@
+# Production-ready image for server.js and bot.js (same image can run either)
+FROM node:20-bullseye-slim
+
+# Install build deps for native modules (if needed)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 build-essential ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /usr/src/app
+
+# Install deps (use package-lock when present)
+COPY package*.json ./
+RUN npm ci --production
+
+# Copy source
+COPY . .
+
+# Expose common ports (server and bot)
+EXPOSE 3000 8000
+
+# Default command (can be overridden in docker run / compose)
+CMD ["node", "bot.js"]
