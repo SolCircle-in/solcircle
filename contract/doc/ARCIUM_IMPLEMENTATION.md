@@ -2,12 +2,6 @@
 
 This document explains what Arcium is, how it’s integrated in this repo, what parts of the system are responsible for what, and how to build, test, and deploy. It consolidates the official docs and maps them to our code.
 
-References:
-- Docs home: https://docs.arcium.com/
-- Developers: https://docs.arcium.com/developers
-- Deployment: https://docs.arcium.com/developers/deployment
-- TypeScript SDK: https://ts.arcium.com/api
-
 
 ## What Arcium is and why we use it
 
