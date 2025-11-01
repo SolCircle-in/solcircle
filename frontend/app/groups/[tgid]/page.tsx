@@ -25,6 +25,14 @@ import {
 import { GL } from "@/components/gl";
 import Link from "next/link";
 
+interface TelegramInfo {
+  title: string;
+  description?: string;
+  username?: string;
+  memberCount?: number;
+  type?: string;
+}
+
 interface GroupDetail {
   tgid: string;
   relay_account: string;
@@ -41,6 +49,7 @@ interface GroupDetail {
   total_members?: number;
   profit_loss?: number;
   total_pool?: number;
+  telegram?: TelegramInfo;
 }
 
 interface Participant {
@@ -111,6 +120,7 @@ export default function GroupDetailPage() {
   const [statsUniqueTokens, setStatsUniqueTokens] = useState<number | undefined>(undefined);
   const [tokenHoldings, setTokenHoldings] = useState<TokenHolding[] | undefined>(undefined);
   const [network, setNetwork] = useState<string | undefined>(undefined);
+  const [joining, setJoining] = useState(false);
 
   useEffect(() => {
     if (tgid) {
@@ -124,7 +134,8 @@ export default function GroupDetailPage() {
   const fetchGroupDetails = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:8000/api/groups/${tgid}`);
+      // Fetch group details with Telegram info included
+      const response = await fetch(`http://localhost:8000/api/groups/${tgid}?includeGroupInfo=true`);
       
       if (!response.ok) {
         throw new Error("Failed to fetch group details");
@@ -244,6 +255,27 @@ export default function GroupDetailPage() {
     return `${address.slice(0, chars)}...${address.slice(-chars)}`;
   };
 
+  const handleJoin = async () => {
+    try {
+      setJoining(true);
+      const resp = await fetch(`http://localhost:8000/api/groups/${encodeURIComponent(tgid)}/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ joinRequest: true }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data?.success || !data?.invite_link) {
+        throw new Error(data?.error || 'Failed to create invite link');
+      }
+      window.location.href = data.invite_link as string;
+    } catch (err) {
+      console.error('Join error:', err);
+      alert(err instanceof Error ? err.message : 'Failed to create invite link');
+    } finally {
+      setJoining(false);
+    }
+  };
+
   if (loading) {
     return (
       <>
@@ -306,20 +338,37 @@ export default function GroupDetailPage() {
         {/* Header */}
         <div className="flex items-start justify-between mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2 font-mono">
-              Group {tgid.slice(-6)}
+            <h1 className="text-4xl font-bold text-white mb-2">
+              {group.telegram?.title || `Group ${tgid.slice(-6)}`}
             </h1>
-            <p className="text-foreground/60 text-sm font-mono">{tgid}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-foreground/60 text-sm font-mono">{tgid}</p>
+              {group.telegram?.username && (
+                <span className="text-blue-400 text-sm">@{group.telegram.username}</span>
+              )}
+            </div>
+            {group.telegram?.description && (
+              <p className="text-foreground/70 text-sm mt-2 max-w-2xl">{group.telegram.description}</p>
+            )}
           </div>
-          <Badge
-            className={
-              group.status === "active"
-                ? "bg-green-500/20 text-green-400 border-green-500/30 text-lg px-4 py-2"
-                : "bg-gray-500/20 text-gray-400 border-gray-500/30 text-lg px-4 py-2"
-            }
-          >
-            {group.status}
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Badge
+              className={
+                group.status === "active"
+                  ? "bg-green-500/20 text-green-400 border-green-500/30 text-lg px-4 py-2"
+                  : "bg-gray-500/20 text-gray-400 border-gray-500/30 text-lg px-4 py-2"
+              }
+            >
+              {group.status}
+            </Badge>
+            <Button
+              onClick={handleJoin}
+              disabled={joining}
+              className="bg-green-600/20 hover:bg-green-600/30 border border-green-500/30 text-green-300"
+            >
+              {joining ? 'Joining…' : 'Join Group'}
+            </Button>
+          </div>
         </div>
 
         {/* Key Metrics */}

@@ -27,6 +27,14 @@ interface TokenHolding {
   orders: TokenOrderSummary[];
 }
 
+interface TelegramInfo {
+  title: string;
+  description?: string;
+  username?: string;
+  memberCount?: number;
+  type?: string;
+}
+
 interface Group {
   tgid: string;
   relay_account: string;
@@ -50,6 +58,8 @@ interface Group {
   stats_unique_tokens?: number;
   token_holdings?: TokenHolding[];
   network?: string;
+  // Telegram info
+  telegram?: TelegramInfo;
 }
 
 interface GroupsResponse {
@@ -62,6 +72,7 @@ export default function GroupsPage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [joining, setJoining] = useState<string | null>(null);
 
   useEffect(() => {
     fetchGroups();
@@ -70,7 +81,8 @@ export default function GroupsPage() {
   const fetchGroups = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:8000/api/groups");
+      // Fetch groups with Telegram info included
+      const response = await fetch("http://localhost:8000/api/groups?includeGroupInfo=true");
       
       if (!response.ok) {
         throw new Error("Failed to fetch groups");
@@ -157,6 +169,29 @@ export default function GroupsPage() {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleJoin = async (tgid: string) => {
+    try {
+      setJoining(tgid);
+      const response = await fetch(`http://localhost:8000/api/groups/${encodeURIComponent(tgid)}/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ joinRequest: true }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data?.success || !data?.invite_link) {
+        throw new Error(data?.error || 'Failed to create invite link');
+      }
+      // Redirect the user to Telegram invite link
+      window.location.href = data.invite_link as string;
+    } catch (err) {
+      console.error('Join error:', err);
+      alert(err instanceof Error ? err.message : 'Failed to create invite link');
+    } finally {
+      setJoining(null);
     }
   };
 
@@ -294,6 +329,7 @@ export default function GroupsPage() {
               <TableHeader>
                 <TableRow className="border-purple-500/20 hover:bg-purple-500/5">
                   <TableHead className="text-purple-300 font-semibold">Rank</TableHead>
+                  <TableHead className="text-purple-300 font-semibold">Group Name</TableHead>
                   <TableHead className="text-purple-300 font-semibold">Group ID</TableHead>
                   <TableHead className="text-purple-300 font-semibold">
                     <div className="flex items-center gap-2">
@@ -330,9 +366,19 @@ export default function GroupsPage() {
                         <TableCell className="font-mono text-purple-400 font-bold">
                           #{index + 1}
                         </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-foreground font-semibold">
+                              {group.telegram?.title || `Group ${group.tgid.slice(-6)}`}
+                            </span>
+                            {group.telegram?.username && (
+                              <span className="text-xs text-blue-400">@{group.telegram.username}</span>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell className="font-mono text-sm">
                           <div className="flex flex-col">
-                            <span className="text-foreground/90">Group {group.tgid.slice(-6)}</span>
+                            <span className="text-foreground/90">{group.tgid.slice(-8)}</span>
                             <span className="text-xs text-foreground/40">{group.tgid}</span>
                           </div>
                         </TableCell>
@@ -424,15 +470,25 @@ export default function GroupsPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">
-                          <Link href={`/groups/${encodeURIComponent(group.tgid)}`}>
+                          <div className="flex items-center justify-center gap-2">
+                            <Link href={`/groups/${encodeURIComponent(group.tgid)}`}>
+                              <Button
+                                size="sm"
+                                className="bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300"
+                              >
+                                <Eye className="w-4 h-4 mr-1" />
+                                View
+                              </Button>
+                            </Link>
                             <Button
                               size="sm"
-                              className="bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300"
+                              disabled={joining === group.tgid}
+                              onClick={() => handleJoin(group.tgid)}
+                              className="bg-green-600/20 hover:bg-green-600/30 border border-green-500/30 text-green-300"
                             >
-                              <Eye className="w-4 h-4 mr-1" />
-                              View
+                              {joining === group.tgid ? 'Joining…' : 'Join'}
                             </Button>
-                          </Link>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );

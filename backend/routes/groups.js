@@ -6,6 +6,8 @@ const {
   verifyGroupOwnership,
   getChatInfo,
   sendVerificationMessage,
+  createChatInviteLink,
+  checkBotPermissions,
 } = require("../utils/telegram");
 const { generateVerificationToken, hash } = require("../utils/crypto");
 const anchor = require("@coral-xyz/anchor");
@@ -202,6 +204,18 @@ router.post("/register", async (req, res) => {
       });
     }
 
+    // Step 3.5: Check bot permissions
+    const botPerms = await checkBotPermissions(botToken, tgid);
+    console.log("Bot permissions check:", botPerms);
+
+    // Warn if bot lacks permissions (but don't block registration)
+    const permissionWarnings = [];
+    if (!botPerms.success) {
+      permissionWarnings.push(`Could not verify bot permissions: ${botPerms.error}`);
+    } else if (botPerms.needsPermissions && botPerms.needsPermissions.length > 0) {
+      permissionWarnings.push(...botPerms.needsPermissions);
+    }
+
     // Step 4: Create group with custodial wallet AND initialize Solana pool
     const result = await transaction(async (client) => {
       // Create custodial wallet for group
@@ -325,7 +339,8 @@ router.post("/register", async (req, res) => {
       };
     });
 
-    res.status(201).json({
+    // Prepare response with permission warnings if any
+    const response = {
       success: true,
       message: "Group registered successfully with Solana pool",
       data: {
@@ -354,7 +369,26 @@ router.post("/register", async (req, res) => {
           isAdmin: verification.isAdmin,
         },
       },
-    });
+    };
+
+    // Add permission warnings if bot lacks required permissions
+    if (permissionWarnings.length > 0) {
+      response.warnings = permissionWarnings;
+      response.setupInstructions = {
+        message: "⚠️ Bot needs additional permissions for full functionality",
+        steps: [
+          "1. Open your Telegram group",
+          "2. Go to Group Info → Administrators",
+          "3. Add the bot as administrator",
+          "4. Enable these permissions:",
+          "   • Invite Users via Link (required for web join)",
+          "   • Manage Chat (recommended)",
+        ],
+        botUsername: `@${process.env.BOT_USERNAME || 'your_bot'}`,
+      };
+    }
+
+    res.status(201).json(response);
   } catch (error) {
     console.error("Registration error:", error);
     res.status(500).json({
@@ -366,16 +400,163 @@ router.post("/register", async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const result = await query("SELECT * FROM groups ORDER BY created_at DESC");
+    const groups = result.rows;
+
+    // Optionally enrich with Telegram group info (title, description, etc.)
+    const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+    
+    if (botToken && req.query.includeGroupInfo === 'true') {
+      // Fetch Telegram info for each group
+      const enrichedGroups = await Promise.all(
+        groups.map(async (group) => {
+          try {
+            const chatInfo = await getChatInfo(botToken, group.tgid);
+            if (chatInfo.success) {
+              return {
+                ...group,
+                telegram: {
+                  title: chatInfo.title,
+                  description: chatInfo.description,
+                  username: chatInfo.username,
+                  memberCount: chatInfo.memberCount,
+                  type: chatInfo.type,
+                },
+              };
+            }
+          } catch (err) {
+            console.error(`Failed to get info for group ${group.tgid}:`, err.message);
+          }
+          return group;
+        })
+      );
+
+      return res.json({
+        success: true,
+        count: enrichedGroups.length,
+        data: enrichedGroups,
+      });
+    }
+
+    // Default: return groups without Telegram info
     res.json({
       success: true,
-      count: result.rows.length,
-      data: result.rows,
+      count: groups.length,
+      data: groups,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
       error: error.message,
     });
+  }
+});
+
+// Create an invite link for a group (used by the web to let users join)
+// POST /api/groups/:tgid/invite
+router.post("/:tgid/invite", async (req, res) => {
+  try {
+    const { tgid } = req.params;
+    const { name, expire_date, member_limit, joinRequest } = req.body || {};
+
+    // 1) Ensure group is registered
+    const groupResult = await query("SELECT * FROM groups WHERE tgid = $1", [tgid]);
+    if (groupResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: "Group not found" });
+    }
+
+    // 2) Resolve bot token
+    const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) {
+      return res.status(500).json({ success: false, error: "Telegram bot token not configured" });
+    }
+
+    // 3) Try to create a non-primary invite link
+    const options = {
+      ...(name ? { name } : {}),
+      ...(expire_date ? { expire_date } : {}),
+      ...(member_limit ? { member_limit } : {}),
+      // default to join requests to allow approval flow; set to false to let users join directly
+      creates_join_request: joinRequest !== undefined ? !!joinRequest : true,
+    };
+
+    const createRes = await createChatInviteLink(botToken, tgid, options);
+
+    if (!createRes.success) {
+      return res.status(400).json({
+        success: false,
+        error: createRes.error || "Failed to create invite link",
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      invite_link: createRes.invite_link,
+      join_request: options.creates_join_request,
+    });
+  } catch (error) {
+    console.error("Create invite error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Check bot permissions for a specific group
+// GET /api/groups/:tgid/bot-permissions
+router.get("/:tgid/bot-permissions", async (req, res) => {
+  try {
+    const { tgid } = req.params;
+
+    // Check if group exists
+    const groupResult = await query("SELECT * FROM groups WHERE tgid = $1", [tgid]);
+    if (groupResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: "Group not found" });
+    }
+
+    const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) {
+      return res.status(500).json({ success: false, error: "Bot token not configured" });
+    }
+
+    const botPerms = await checkBotPermissions(botToken, tgid);
+
+    if (!botPerms.success) {
+      return res.status(400).json({
+        success: false,
+        error: botPerms.error,
+      });
+    }
+
+    // Add helpful setup instructions if permissions are missing
+    const response = {
+      success: true,
+      tgid,
+      permissions: {
+        isAdmin: botPerms.isAdmin,
+        canInviteUsers: botPerms.canInviteUsers,
+        canManageChat: botPerms.canManageChat,
+        canCreateInviteLinks: botPerms.canCreateInviteLinks,
+        status: botPerms.status,
+      },
+    };
+
+    if (botPerms.needsPermissions && botPerms.needsPermissions.length > 0) {
+      response.warnings = botPerms.needsPermissions;
+      response.setupInstructions = {
+        message: "Bot needs additional permissions",
+        steps: [
+          "1. Open your Telegram group",
+          "2. Go to Group Info → Administrators",
+          "3. Add/edit the bot as administrator",
+          "4. Enable these permissions:",
+          "   • Invite Users via Link (required)",
+          "   • Manage Chat (recommended)",
+        ],
+      };
+    }
+
+    res.json(response);
+  } catch (error) {
+    console.error("Check bot permissions error:", error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -392,9 +573,31 @@ router.get("/:tgid", async (req, res) => {
       });
     }
 
+    const group = result.rows[0];
+
+    // Optionally include Telegram group info
+    const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+    
+    if (botToken && req.query.includeGroupInfo === 'true') {
+      try {
+        const chatInfo = await getChatInfo(botToken, tgid);
+        if (chatInfo.success) {
+          group.telegram = {
+            title: chatInfo.title,
+            description: chatInfo.description,
+            username: chatInfo.username,
+            memberCount: chatInfo.memberCount,
+            type: chatInfo.type,
+          };
+        }
+      } catch (err) {
+        console.error(`Failed to get Telegram info for group ${tgid}:`, err.message);
+      }
+    }
+
     res.json({
       success: true,
-      data: result.rows[0],
+      data: group,
     });
   } catch (error) {
     res.status(500).json({

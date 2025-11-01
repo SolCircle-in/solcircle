@@ -157,6 +157,40 @@ async function checkGroupRegistered(ctx, next) {
 // Apply middleware to all commands except start and register
 bot.use(checkGroupRegistered);
 
+// --- Bot Event Handlers ---
+
+// Handle when bot is added to a group or its status changes
+bot.on('my_chat_member', async (ctx) => {
+  const { chat, new_chat_member } = ctx.update.my_chat_member;
+  
+  // Only handle group/supergroup additions
+  if (chat.type !== 'group' && chat.type !== 'supergroup') return;
+  
+  // Check if bot was added as admin or member
+  if (new_chat_member.status === 'administrator' || new_chat_member.status === 'member') {
+    const isAdmin = new_chat_member.status === 'administrator';
+    const canInvite = new_chat_member.can_invite_users || false;
+    
+    let message = `🤖 Hello! I'm now in this group.\n\n`;
+    
+    if (isAdmin && canInvite) {
+      message += `✅ I have all required permissions!\n\n`;
+      message += `To register this group:\n1. Run /register\n2. Your group will be available on the website for users to join`;
+    } else if (isAdmin && !canInvite) {
+      message += `⚠️ I'm an admin, but I need the "Invite Users via Link" permission.\n\n`;
+      message += `Please:\n1. Go to Group Info → Administrators\n2. Edit my permissions\n3. Enable "Invite Users via Link"\n4. Then run /register`;
+    } else {
+      message += `⚠️ I need to be an administrator to work properly.\n\n`;
+      message += `Please:\n1. Go to Group Info → Administrators\n2. Promote me to administrator\n3. Enable "Invite Users via Link" permission\n4. Then run /register`;
+    }
+    
+    try {
+      await ctx.telegram.sendMessage(chat.id, message);
+    } catch (err) {
+      console.error('Failed to send welcome message:', err.message);
+    }
+  }
+});
 
 // --- Bot Commands ---
 bot.start((ctx) =>
@@ -339,6 +373,29 @@ bot.command("echo", async (ctx) => {
   } catch (e) {
     console.error(e.message);
     await ctx.reply("Backend error while echoing.");
+  }
+});
+
+// ✅ Auto-approve join requests for registered groups (when using join-request invite links)
+bot.on('chat_join_request', async (ctx) => {
+  try {
+    const chatId = ctx.update.chat_join_request.chat.id;
+    const requester = ctx.update.chat_join_request.from;
+
+    // Check if the group is registered in our backend
+    const resp = await axios.get(`${BACKEND_BASE_EXPRESS}/api/groups/${chatId}`);
+    const isRegistered = !!resp.data?.success;
+
+    if (!isRegistered) {
+      console.log(`Join request for unregistered chat ${chatId}, ignoring`);
+      return;
+    }
+
+    // Approve the join request
+    await ctx.telegram.approveChatJoinRequest(chatId, requester.id);
+    console.log(`Approved join request for user ${requester.id} in chat ${chatId}`);
+  } catch (err) {
+    console.error('Failed to approve chat join request:', err.response?.data || err.message);
   }
 });
 
