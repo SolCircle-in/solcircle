@@ -148,7 +148,7 @@ export default function LoginPage() {
       </div>
 
       {/* Header */}
-      <div className="relative z-10 flex items-center justify-between px-6 md:px-12 py-6 border-b border-border">
+      <div className="relative z-10 flex items-center justify-between px-6 md:px-12 py-6">
         <Link
           href="/"
           className="flex items-center gap-2 text-foreground/60 hover:text-foreground transition-colors"

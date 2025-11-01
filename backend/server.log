@@ -1,0 +1,11 @@
+[dotenv@17.2.3] injecting env (13) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[dotenv@17.2.3] injecting env (0) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+🚀 Server running on port 8000
+📍 API available at http://localhost:8000
+💚 Health check at http://localhost:8000/health
+✅ Loaded IDL from: /Users/engineering_faliure/Desktop/Projects/SolCircle/target/idl/sol_pool.json
+✅ Loaded admin keypair from: /Users/engineering_faliure/Desktop/Projects/SolCircle/admin-keypair.json
+✅ Loaded Solana program: EYgpxu2D6RyE8vcv4DAsdVhXxrzajc8Jcy4hHScXpBNy
+✅ Admin keypair: FxZgTTTvdsMND5Cw7cQFrUytU6FrAqHLU2ouXP33QXNA
+2025-10-30T07:12:19.290Z - GET /health
+2025-10-30T07:12:19.315Z - GET /api/sanctum/status

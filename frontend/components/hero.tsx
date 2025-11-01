@@ -4,11 +4,14 @@ import Link from "next/link"
 import { GL } from "./gl"
 import { Pill } from "./pill"
 import { Button } from "./ui/button"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { TrendingUp, Zap, BarChart3, Rocket } from "lucide-react"
+import TypingTitle from "./typing-title"
+import BgMusic from "./bg-music"
 
 export function Hero() {
   const [hovering, setHovering] = useState(false)
+  const bgAudioRef = useRef<HTMLAudioElement | null>(null)
 
   const features = [
     {
@@ -33,19 +36,29 @@ export function Hero() {
     },
   ]
 
+  useEffect(() => {
+    return () => {
+      if (bgAudioRef.current) {
+        try { bgAudioRef.current.pause(); } catch {}
+        bgAudioRef.current = null
+      }
+    }
+  }, [])
+
   return (
     <div className="flex flex-col min-h-svh">
+      {/* Replace with your interstellar-style track placed at public/ambient.mp3 */}
+      <BgMusic src="/ambient.mp3" volume={0.05} />
       <GL hovering={hovering} />
 
       {/* Hero Section */}
       <div className="relative z-10 flex flex-col h-svh justify-start">
         <div className="pt-64 pb-16 text-center">
-          <Pill className="mb-6">NEXT GENERATION TRADING</Pill>
-          <h1 className="text-5xl sm:text-6xl md:text-7xl font-sentient">
-            Vote. Invest. <br />
-            <i className="font-light">Win.</i>
+          <Pill id="hero-pill" className="mb-6">NEXT GENERATION TRADING</Pill>
+          <h1 className="text-7xl sm:text-8xl md:text-9xl font-sentient font-bold">
+            <TypingTitle className="inline" words={["Vote.", "Invest.", "Win."]} />
           </h1>
-          <p className="font-mono text-sm sm:text-base text-foreground/60 text-balance mt-8 max-w-[540px] mx-auto">
+          <p className="font-mono text-sm sm:text-base text-foreground text-balance mt-8 max-w-[540px] mx-auto">
             Join the revolution where Telegram groups become trading powerhouses
             on Solana.
           </p>
@@ -115,13 +128,13 @@ export function Hero() {
             </h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-2xl mx-auto">
-            <div className="border border-border rounded-lg p-6">
+            <div className="border border-border rounded-lg p-6 backdrop-blur-[2px] bg-[rgba(30,0,50,0.06)]">
               <p className="font-mono text-sm text-foreground/60 mb-2">
                 VOTING POWER
               </p>
               <div className="text-3xl font-sentient">847 Votes</div>
             </div>
-            <div className="border border-border rounded-lg p-6">
+            <div className="border border-border rounded-lg p-6 backdrop-blur-[2px] bg-[rgba(30,0,50,0.06)]">
               <p className="font-mono text-sm text-foreground/60 mb-2">
                 SESSION PERFORMANCE
               </p>
@@ -154,7 +167,7 @@ export function Hero() {
               return (
                 <div
                   key={index}
-                  className="border border-border rounded-lg p-8"
+                  className="border border-border rounded-lg p-8 backdrop-blur-[2px] bg-[rgba(30,0,50,0.06)]"
                 >
                   <Icon className="w-8 h-8 text-primary mb-4" />
                   <h3 className="font-sentient text-lg mb-2">

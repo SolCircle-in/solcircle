@@ -3,6 +3,7 @@ import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import HeaderWrapper from "@/components/HeaderWrapper";
 import { WalletContextProvider } from "@/components/wallet-provider";
+import LenisProvider from "@/components/lenis-provider";
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -20,11 +21,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" style={{zoom: '100%'}}>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.TallyConfig = {"formId":"mYEpyJ","popup":{"width":500,"emoji":{"text":"👋","animation":"wave"},"open":{"trigger":"scroll","scrollPercent":95},"overlay":true}};`
+          }}
+        />
+        <script async src="https://tally.so/widgets/embed.js"></script>
+      </head>
       <body className={geistMono.variable}>
         <WalletContextProvider>
-          <HeaderWrapper />
-          {children}
+          <LenisProvider>
+            <HeaderWrapper />
+            {children}
+          </LenisProvider>
         </WalletContextProvider>
       </body>
     </html>

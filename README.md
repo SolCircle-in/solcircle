@@ -1,4 +1,4 @@
-# SOL Circle
+# SolCircle
 
 > Decentralized social trading platform built on Solana with privacy-preserving dark pools
 
@@ -54,7 +54,7 @@ SOL Circle enables collaborative trading through Telegram groups with multi-part
 ## Architecture
 
 <div align="center">
-  <img src="Arcium/system_architecture.png" alt="SOL Circle System Architecture" width="800">
+  <img src="Assets/system_architecture.png" alt="SOL Circle System Architecture" width="800">
   <p><em>Complete system architecture showing the integration between Telegram, Backend, Solana blockchain, and Arcium MPC network</em></p>
 </div>
 

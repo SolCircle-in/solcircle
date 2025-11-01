@@ -17,11 +17,11 @@
 }
 
 :root {
-  --background: #000000;
+  --background: #1a1a1a;
   --foreground: #ffffff;
-  --primary: #7b2cbf;
+  --primary: #9d4edd;
   --primary-foreground: #ffffff;
-  --border: #424242;
+  --border: #525252;
 }
 
 @utility container {
@@ -48,6 +48,31 @@
   --font-sentient: 'Sentient', sans-serif;
 
   --shadow-glow: 0 0 8px 2px var(--tw-shadow-color);
+}
+
+/* Normal scroll behavior */
+html, body {
+  scroll-behavior: auto;
+}
+
+/* typing cursor blink */
+.typing-cursor {
+  display: inline-block;
+  animation: typing-blink 1.1s steps(2, start) infinite;
+}
+@keyframes typing-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+/* Pill dot blink */
+.pill-dot-blink {
+  animation: pill-blink 1.2s ease-in-out infinite;
+}
+@keyframes pill-blink {
+  0%, 60% { opacity: 1; filter: drop-shadow(0 0 6px rgba(123,44,191,0.7)); }
+  80% { opacity: 0.35; filter: drop-shadow(0 0 2px rgba(123,44,191,0.3)); }
+  100% { opacity: 1; filter: drop-shadow(0 0 6px rgba(123,44,191,0.7)); }
 }
 
 body {

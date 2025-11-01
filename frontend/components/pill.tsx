@@ -1,13 +1,14 @@
 import { cn } from "@/lib/utils";
 import { px } from "./utils";
 
-export const Pill = ({ children, className }: { children: React.ReactNode, className?: string }) => {
+export const Pill = ({ children, className, ...props }: React.PropsWithChildren<React.HTMLAttributes<HTMLDivElement>>) => {
   const polyRoundness = 6
   const hypotenuse = polyRoundness * 2
   const hypotenuseHalf = polyRoundness / 2 - 1.5
 
   return (
     <div
+      {...props}
       style={{
         "--poly-roundness": px(polyRoundness),
       } as React.CSSProperties}
@@ -18,7 +19,7 @@ export const Pill = ({ children, className }: { children: React.ReactNode, class
       <span style={{ "--h": px(hypotenuse), "--hh": px(hypotenuseHalf) } as React.CSSProperties} className="absolute w-[var(--h)] bottom-[var(--hh)] left-[var(--hh)] h-[2px] bg-border rotate-45 -translate-x-1/2" />
       <span style={{ "--h": px(hypotenuse), "--hh": px(hypotenuseHalf) } as React.CSSProperties} className="absolute w-[var(--h)] bottom-[var(--hh)] right-[var(--hh)] h-[2px] bg-border -rotate-45 translate-x-1/2" />
 
-      <span className="inline-block size-2.5 rounded-full bg-primary mr-2 shadow-glow shadow-primary/50" />
+      <span className="inline-block size-2.5 rounded-full bg-primary mr-2 shadow-glow shadow-primary/50 pill-dot-blink" />
 
       {children}
     </div>
