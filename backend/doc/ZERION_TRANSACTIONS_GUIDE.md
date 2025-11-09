@@ -12,6 +12,14 @@ All 5 Transaction History features have been added:
 
 ---
 
+> Important: Replace placeholders like `alice123` with a real user identifier from your database.
+>
+> - Identifier can be either `utgid` or `username` from the `users` table.
+> - To quickly inspect users (using your `DB_URL`), run a SQL query such as:
+>   `SELECT utgid, username, main_pkey FROM users LIMIT 5;`
+> - Ensure `ZERION_API_KEY` is set in `.env` and you’re calling the correct port (server uses `PORT`, default 3000).
+> - For full integration context, see `doc/ZERION_INTEGRATION_DEEP_DIVE.md`.
+
 ## 🚀 **New API Endpoints**
 
 ### 1. **Transaction History**

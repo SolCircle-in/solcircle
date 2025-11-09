@@ -30,6 +30,9 @@ const PORT = process.env.PORT || 3000;
 const BACKEND_BASE_EXPRESS = process.env.BACKEND_BASE_EXPRESS || `http://localhost:3000`;
 if (!BOT_TOKEN) throw new Error("❌ BOT_TOKEN missing in .env");
 
+// Set internal API key for authentication bypass
+axios.defaults.headers.common['x-api-key'] = process.env.INTERNAL_API_KEY || "internal-secret-key-change-in-production";
+
 const bot = new Telegraf(BOT_TOKEN, { telegram: { webhookReply: true } });
 
 // --- Load Solana Keypair ---
@@ -1595,23 +1598,60 @@ bot.command("view_order", async (ctx) => {
     const totalSpent = parseFloat(order.total_amount_spent || 0);
     const tokenAmount = parseFloat(order.token_amount || 0);
     const fees = parseFloat(order.fees || 0);
+    const totalCost = totalSpent + fees;
 
-    // Get current token price (you'll need to implement this based on your DEX)
-    // For now, using placeholder - replace with actual price fetch
     let currentPrice = 0;
     let currentValue = 0;
     let pnl = 0;
     let pnlPercent = 0;
+    let isRealizedPnl = false;
+    let isSimulatedPrice = false;
 
     try {
-      // TODO: Fetch current price from Raydium/Jupiter
-      // For now, using bought price as placeholder
-      currentPrice = boughtAtPrice * 1.05; // Simulated 5% increase
-      currentValue = tokenAmount * currentPrice;
-      pnl = currentValue - totalSpent - fees;
-      pnlPercent = totalSpent > 0 ? (pnl / totalSpent) * 100 : 0;
+      if (order.status === 'sold') {
+        // For sold orders, use actual sold price
+        const soldAtPrice = parseFloat(order.sold_at_price || 0);
+        const sellFees = parseFloat(order.sell_fees || 0);
+
+        currentPrice = soldAtPrice;
+        currentValue = tokenAmount * soldAtPrice;
+
+        // Realized P&L = proceeds - total cost
+        const proceeds = currentValue - sellFees;
+        pnl = proceeds - totalCost;
+        pnlPercent = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
+        isRealizedPnl = true;
+      } else {
+        // For active orders, fetch real current price from Raydium
+        try {
+          // Get token mint address - assuming MALONEY for now
+          const tokenMint = "H2FqRtjfzCHTdSHZF3fSfNEJh5xvTP3dnM9415N7g9GX";
+
+          const priceResp = await axios.get(
+            `${BACKEND_BASE_EXPRESS}/api/test/price?token=${tokenMint}`
+          );
+
+          if (priceResp.data.success) {
+            currentPrice = priceResp.data.data.price_sol;
+            isSimulatedPrice = false;
+            console.log(`✅ Fetched real price: ${currentPrice} SOL per token`);
+          } else {
+            throw new Error("Price API returned error");
+          }
+        } catch (priceErr) {
+          console.warn("Failed to fetch real price, using fallback:", priceErr.message);
+          // Fallback to simulated price
+          currentPrice = boughtAtPrice * 1.05;
+          isSimulatedPrice = true;
+        }
+
+        currentValue = tokenAmount * currentPrice;
+        pnl = currentValue - totalCost;
+        pnlPercent = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
+        isRealizedPnl = false;
+      }
     } catch (priceErr) {
-      console.error("Failed to fetch current price:", priceErr);
+      console.error("Failed to calculate P&L:", priceErr);
     }
 
     const date = new Date(order.created_at).toLocaleString();
@@ -1632,11 +1672,15 @@ bot.command("view_order", async (ctx) => {
 
     message += `📊 <b>Price Analysis</b>\n`;
     message += `• Bought At: ${boughtAtPrice.toFixed(8)} SOL per token\n`;
-    message += `• Current Price: ${currentPrice.toFixed(8)} SOL per token\n`;
+    if (order.status === 'sold') {
+      message += `• Sold At: ${currentPrice.toFixed(8)} SOL per token\n`;
+    } else {
+      message += `• Current Price: ${currentPrice.toFixed(8)} SOL per token${isSimulatedPrice ? ' ⚠️ (Simulated)' : ''}\n`;
+    }
     message += `• Price Change: ${pnlColor}${((currentPrice - boughtAtPrice) / boughtAtPrice * 100).toFixed(2)}%\n\n`;
 
-    message += `${pnlEmoji} <b>Profit/Loss</b>\n`;
-    message += `• Current Value: ${currentValue.toFixed(4)} SOL\n`;
+    message += `${pnlEmoji} <b>${isRealizedPnl ? 'Realized' : 'Unrealized'} Profit/Loss</b>\n`;
+    message += `• ${isRealizedPnl ? 'Proceeds' : 'Current Value'}: ${currentValue.toFixed(4)} SOL\n`;
     message += `• P&L: ${pnlColor}${pnl.toFixed(4)} SOL (${pnlColor}${pnlPercent.toFixed(2)}%)\n\n`;
 
     if (order.transaction_hash) {
@@ -1655,13 +1699,26 @@ bot.command("view_order", async (ctx) => {
         const userOrder = userOrderResp.data.data;
         const userTokens = parseFloat(userOrder.tokens_allocated || 0);
         const userContribution = parseFloat(userOrder.amount || 0);
-        const userPnl = (userTokens * currentPrice) - userContribution - parseFloat(userOrder.fees || 0);
-        const userPnlPercent = userContribution > 0 ? (userPnl / userContribution) * 100 : 0;
+        const userFees = parseFloat(userOrder.fees || 0);
+        const userTotalCost = userContribution + userFees;
+
+        let userPnl = 0;
+        if (order.status === 'sold') {
+          // For sold orders, use actual profit_loss from database
+          userPnl = parseFloat(userOrder.profit_loss || 0);
+        } else {
+          // For active orders, calculate unrealized P&L
+          userPnl = (userTokens * currentPrice) - userTotalCost;
+        }
+
+        const userPnlPercent = userTotalCost > 0 ? (userPnl / userTotalCost) * 100 : 0;
+        const userPnlColor = userPnl >= 0 ? "+" : "";
 
         message += `👤 <b>Your Position</b>\n`;
         message += `• Contributed: ${userContribution.toFixed(4)} SOL\n`;
+        message += `• Fees: ${userFees.toFixed(6)} SOL\n`;
         message += `• Tokens Allocated: ${userTokens.toFixed(2)} ${order.token_symbol}\n`;
-        message += `• Your P&L: ${pnlColor}${userPnl.toFixed(4)} SOL (${pnlColor}${userPnlPercent.toFixed(2)}%)\n`;
+        message += `• Your P&L: ${userPnlColor}${userPnl.toFixed(4)} SOL (${userPnlColor}${userPnlPercent.toFixed(2)}%)\n`;
       }
     }
 

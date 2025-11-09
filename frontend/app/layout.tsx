@@ -22,14 +22,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" style={{zoom: '100%'}}>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `window.TallyConfig = {"formId":"mYEpyJ","popup":{"width":500,"emoji":{"text":"👋","animation":"wave"},"open":{"trigger":"scroll","scrollPercent":95},"overlay":true}};`
-          }}
-        />
-        <script async src="https://tally.so/widgets/embed.js"></script>
-      </head>
       <body className={geistMono.variable}>
         <WalletContextProvider>
           <LenisProvider>

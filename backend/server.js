@@ -1,19 +1,56 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
+const { auth, requireAuth } = require("./middleware/auth");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT =  process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  credentials: true, // Allow cookies to be sent
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser()); // Parse cookies
 
 // Request logging middleware
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
+});
+
+// Conditional authentication middleware
+// Public routes: registration, login, root, health check
+// All other routes require authentication
+app.use((req, res, next) => {
+  const publicRoutes = [
+    { method: 'POST', path: '/api/users' },           // Registration
+    { method: 'POST', path: '/api/users/login' },     // Login
+    { method: 'GET', path: '/' },                      // Root
+    { method: 'GET', path: '/health' },                // Health check
+  ];
+
+  // Check if current route is public
+  const isPublicRoute = publicRoutes.some(
+    route => req.method === route.method && req.path === route.path
+  );
+
+  // Test routes are accessible with internal API key (checked in requireAuth)
+  const isTestRoute = req.path.startsWith('/api/test/');
+
+  if (isPublicRoute) {
+    // Use optional auth for public routes (doesn't block)
+    return auth(req, res, next);
+  } else if (isTestRoute) {
+    // Test routes require auth but allow internal API key
+    return requireAuth(req, res, next);
+  } else {
+    // Require authentication for all other routes
+    return requireAuth(req, res, next);
+  }
 });
 
 // Import routes

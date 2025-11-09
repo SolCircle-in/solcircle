@@ -270,4 +270,53 @@ router.post("/:order_id/participants", async (req, res) => {
   }
 });
 
+router.get("/user/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { status } = req.query;
+
+    // Resolve telegram userId -> utgid
+    // const userResult = await query(
+    //   "SELECT utgid FROM users WHERE telegram->>'userId' = $1",
+    //   [userId]
+    // );
+
+    // if (userResult.rows.length === 0) {
+    //   return res.status(404).json({
+    //     success: false,
+    //     error: "User not found",
+    //   });
+    // }
+
+    //const utgid = userResult.rows[0].utgid;
+
+    // Build query: include optional status filter and join order metadata
+    const params = [userId];
+    let q = `SELECT uo.*, o.token_symbol, o.total_amount_spent, o.transaction_hash
+             FROM user_orders uo
+             LEFT JOIN orders o ON uo.order_id = o.order_id
+             WHERE uo.utgid = $1`;
+
+    if (status) {
+      params.push(status);
+      q += ` AND uo.status = $${params.length}`;
+    }
+
+    q += " ORDER BY uo.created_at DESC";
+
+    const result = await query(q, params);
+
+    res.json({
+      success: true,
+      count: result.rows.length,
+      data: result.rows,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 module.exports = router;

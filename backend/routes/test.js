@@ -533,4 +533,146 @@ router.get("/balance/:tgid", async (req, res) => {
   }
 });
 
+/**
+ * Get current token price from Raydium
+ * GET /api/test/price?token=<token_mint>
+ */
+router.get("/price", async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        error: "token parameter is required (token mint address)",
+      });
+    }
+
+    const connection = new Connection("https://api.devnet.solana.com/");
+    const SOL_MINT = NATIVE_MINT;
+    const TOKEN_MINT = new PublicKey(token);
+
+    console.log(`Fetching price for token: ${token}`);
+
+    // Create a temporary keypair just for reading (no transactions)
+    const tempKeypair = Keypair.generate();
+
+    // Initialize Raydium SDK
+    const raydium = await Raydium.load({
+      owner: tempKeypair,
+      connection,
+      cluster: "devnet",
+      disableFeatureCheck: true,
+      disableLoadToken: false,
+      blockhashCommitment: "finalized",
+      urlConfigs: {
+        BASE_HOST: "https://api-v3-devnet.raydium.io",
+        OWNER_BASE_HOST: "https://owner-v1-devnet.raydium.io",
+        SWAP_HOST: "https://transaction-v1-devnet.raydium.io",
+      },
+    });
+
+    console.log("Fetching pool data...");
+    const poolData = await raydium.tradeV2.fetchRoutePoolBasicInfo({
+      amm: DEVNET_PROGRAM_ID.AMM_V4,
+      clmm: DEVNET_PROGRAM_ID.CLMM_PROGRAM_ID,
+      cpmm: DEVNET_PROGRAM_ID.CREATE_CPMM_POOL_PROGRAM,
+    });
+
+    console.log("Computing swap routes (SELLING direction: Token → SOL)...");
+    const routes = raydium.tradeV2.getAllRoute({
+      inputMint: TOKEN_MINT,  // Selling tokens
+      outputMint: SOL_MINT,   // Getting SOL
+      ...poolData,
+    });
+
+    if (!routes || routes.directPath.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "No liquidity pool found for this token",
+      });
+    }
+
+    const {
+      routePathDict,
+      mintInfos,
+      ammSimulateCache,
+      computeClmmPoolInfo,
+      computePoolTickData,
+      computeCpmmData,
+    } = await raydium.tradeV2.fetchSwapRoutesData({
+      routes,
+      inputMint: TOKEN_MINT,  // Selling tokens
+      outputMint: SOL_MINT,   // Getting SOL
+    });
+
+    const inputMintStr = TOKEN_MINT.toBase58();
+    const outputMintStr = SOL_MINT.toBase58();
+
+    // Simulate selling 10 tokens
+    const tokenDecimals = mintInfos[inputMintStr].decimals;
+    const tokensToSell = 10;
+    const inputAmount = (Math.pow(10, tokenDecimals) * tokensToSell).toString(); // 10 tokens in smallest unit
+
+    console.log(`Calculating selling price for ${tokensToSell} tokens...`);
+    const swapRoutes = raydium.tradeV2.getAllRouteComputeAmountOut({
+      inputTokenAmount: new TokenAmount(
+        new Token({
+          mint: inputMintStr,
+          decimals: mintInfos[inputMintStr].decimals,
+        }),
+        inputAmount
+      ),
+      directPath: routes.directPath.map(
+        (p) =>
+          ammSimulateCache[p.id.toBase58()] ||
+          computeClmmPoolInfo[p.id.toBase58()] ||
+          computeCpmmData[p.id.toBase58()]
+      ),
+      routePathDict,
+      simulateCache: ammSimulateCache,
+      tickCache: computePoolTickData,
+      mintInfos: mintInfos,
+      outputToken: {
+        ...mintInfos[outputMintStr],
+        address: outputMintStr,
+      },
+      chainTime: Math.floor(Date.now() / 1000),
+      slippage: 0.01,
+      epochInfo: await connection.getEpochInfo(),
+    });
+
+    const targetRoute = swapRoutes[0];
+    if (!targetRoute) {
+      return res.status(400).json({
+        success: false,
+        error: "Could not calculate price",
+      });
+    }
+
+    // Calculate selling price: 10 tokens → X SOL, so price per token = X / 10
+    const solReceived = parseFloat(targetRoute.amountOut.amount.toExact());
+    const pricePerToken = solReceived / tokensToSell; // SOL per token when SELLING
+
+    console.log(`Selling price calculated: ${pricePerToken} SOL per token`);
+
+    res.json({
+      success: true,
+      data: {
+        token_mint: token,
+        price_sol: pricePerToken,  // Price when SELLING tokens to SOL
+        sol_per_1000_tokens: solReceived,
+        direction: "sell",  // Indicates this is the selling price
+        last_updated: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("Price fetch error:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 module.exports = router;

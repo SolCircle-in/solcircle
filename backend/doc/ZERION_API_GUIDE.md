@@ -30,6 +30,8 @@ Add your Zerion API key to `.env`:
 ZERION_API_KEY=zk_dev_your_actual_key_here
 ```
 
+> Note on examples: Replace identifiers like `alice123` with a real `utgid` or `username` from your `users` table. You can quickly verify with a query such as `SELECT utgid, username, main_pkey FROM users LIMIT 5;`. Also ensure you’re calling the correct server port (`PORT`, default 3000) and that `ZERION_API_KEY` is set.
+
 ### Step 3: Test the Connection
 
 ```bash

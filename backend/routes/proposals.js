@@ -835,10 +835,19 @@ router.post("/:proposal_id/execute-sell", async (req, res) => {
     const solReceived = parseFloat(targetRoute.amountOut.amount.toExact());
     const netProceeds = solReceived - totalFees;
 
-    // Update order status
+    // Calculate sold_at_price (SOL per token)
+    const soldAtPrice = solReceived / parseFloat(order.token_amount);
+
+    // Update order status with sold_at_price, sold_at, and sell_fees
     await query(
-      `UPDATE orders SET status = 'sold', closed_at = NOW() WHERE order_id = $1`,
-      [order_id]
+      `UPDATE orders
+       SET status = 'sold',
+           closed_at = NOW(),
+           sold_at = NOW(),
+           sold_at_price = $2,
+           sell_fees = $3
+       WHERE order_id = $1`,
+      [order_id, soldAtPrice, totalFees]
     );
 
     // Distribute SOL to participants
@@ -876,12 +885,27 @@ router.post("/:proposal_id/execute-sell", async (req, res) => {
 
         // Update user_order with P&L
         await query(
-          `UPDATE user_orders 
-           SET status = 'sold', 
-               profit_loss = $1, 
+          `UPDATE user_orders
+           SET status = 'sold',
+               profit_loss = $1,
                sold_at = NOW()
            WHERE order_id = $2 AND utgid = $3`,
           [profitLoss, order_id, participant.utgid]
+        );
+
+        // Update user's total_pnl
+        const userPnlResult = await query(
+          `SELECT COALESCE(SUM(profit_loss), 0) as total_pnl
+           FROM user_orders
+           WHERE utgid = $1`,
+          [participant.utgid]
+        );
+
+        await query(
+          `UPDATE users
+           SET total_pnl = $1
+           WHERE utgid = $2`,
+          [userPnlResult.rows[0].total_pnl, participant.utgid]
         );
 
         distributions.push({
@@ -905,6 +929,26 @@ router.post("/:proposal_id/execute-sell", async (req, res) => {
         );
       }
     }
+
+    // Update group's total_pnl after all distributions
+    const groupPnlResult = await query(
+      `SELECT COALESCE(SUM(
+        (o.sold_at_price - o.bought_at_price) * o.token_amount - o.fees - COALESCE(o.sell_fees, 0)
+      ), 0) as total_pnl
+       FROM orders o
+       JOIN proposals p ON o.proposal_id = p.proposal_id
+       WHERE p.tgid = $1 AND o.sold_at_price IS NOT NULL`,
+      [tgid]
+    );
+
+    await query(
+      `UPDATE groups
+       SET total_pnl = $1
+       WHERE tgid = $2`,
+      [groupPnlResult.rows[0].total_pnl, tgid]
+    );
+
+    console.log(`✅ Updated group ${tgid} total P&L: ${groupPnlResult.rows[0].total_pnl} SOL`);
 
     res.json({
       success: true,

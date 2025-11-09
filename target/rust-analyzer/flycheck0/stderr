@@ -4,8 +4,8 @@ help: Check that the patched package version and available features are compatib
       with the dependency requirements. If the patch has a different version from
       what is locked in the Cargo.lock file, run `cargo update` to use the new
       version. This may also occur with an optional dependency that is not enabled.
-   0.313179500s  INFO prepare_target{force=false package_id=solcircle_arcium v0.1.0 (/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium) target="solcircle_arcium"}: cargo::core::compiler::fingerprint: fingerprint error for solcircle_arcium v0.1.0 (/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium)/Check { test: false }/TargetInner { ..: lib_target("solcircle_arcium", ["cdylib", "lib"], "/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium/src/lib.rs", Edition2021) }
-   0.313740000s  INFO prepare_target{force=false package_id=solcircle_arcium v0.1.0 (/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium) target="solcircle_arcium"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/target/debug/.fingerprint/solcircle_arcium-8c3cc82f12f36b72/lib-solcircle_arcium`
+   0.298433542s  INFO prepare_target{force=false package_id=solcircle_arcium v0.1.0 (/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium) target="solcircle_arcium"}: cargo::core::compiler::fingerprint: fingerprint error for solcircle_arcium v0.1.0 (/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium)/Check { test: false }/TargetInner { ..: lib_target("solcircle_arcium", ["cdylib", "lib"], "/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium/src/lib.rs", Edition2021) }
+   0.298769084s  INFO prepare_target{force=false package_id=solcircle_arcium v0.1.0 (/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium) target="solcircle_arcium"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/target/debug/.fingerprint/solcircle_arcium-8c3cc82f12f36b72/lib-solcircle_arcium`
 
 Caused by:
     No such file or directory (os error 2)
@@ -28,8 +28,8 @@ Stack backtrace:
   14: std::rt::lang_start::<()>::{closure#0}
   15: std::rt::lang_start_internal
   16: _main
-   0.387742750s  INFO prepare_target{force=false package_id=solcircle_arcium v0.1.0 (/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium) target="solcircle_arcium"}: cargo::core::compiler::fingerprint: fingerprint error for solcircle_arcium v0.1.0 (/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium)/Check { test: true }/TargetInner { ..: lib_target("solcircle_arcium", ["cdylib", "lib"], "/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium/src/lib.rs", Edition2021) }
-   0.387784541s  INFO prepare_target{force=false package_id=solcircle_arcium v0.1.0 (/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium) target="solcircle_arcium"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/target/debug/.fingerprint/solcircle_arcium-14dd9a8b47125c13/test-lib-solcircle_arcium`
+   0.362984750s  INFO prepare_target{force=false package_id=solcircle_arcium v0.1.0 (/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium) target="solcircle_arcium"}: cargo::core::compiler::fingerprint: fingerprint error for solcircle_arcium v0.1.0 (/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium)/Check { test: true }/TargetInner { ..: lib_target("solcircle_arcium", ["cdylib", "lib"], "/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium/src/lib.rs", Edition2021) }
+   0.363003750s  INFO prepare_target{force=false package_id=solcircle_arcium v0.1.0 (/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium) target="solcircle_arcium"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/target/debug/.fingerprint/solcircle_arcium-14dd9a8b47125c13/test-lib-solcircle_arcium`
 
 Caused by:
     No such file or directory (os error 2)
@@ -53,6 +53,6 @@ Stack backtrace:
   15: std::rt::lang_start_internal
   16: _main
     Checking solcircle_arcium v0.1.0 (/Users/engineering_faliure/Desktop/Projects/mono_solana/solcircle/contract/programs/solcircle_arcium)
-error: could not compile `solcircle_arcium` (lib test) due to 46 previous errors; 28 warnings emitted
-warning: build failed, waiting for other jobs to finish...
 error: could not compile `solcircle_arcium` (lib) due to 46 previous errors; 28 warnings emitted
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `solcircle_arcium` (lib test) due to 46 previous errors; 28 warnings emitted

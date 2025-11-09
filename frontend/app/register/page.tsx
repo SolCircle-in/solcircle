@@ -5,13 +5,17 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Wallet, Send, Check } from "lucide-react";
+import { ArrowLeft, Wallet, Send, Check, KeyRound } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
-// removed Header import to hide it on this page
 import { GL } from "@/components/gl";
-
+import { Header } from "@/components/header";
+import { setUserData, type UserData } from "@/lib/utils";
+import api from "@/lib/api";
+const REGISTRATION_API_URL =
+  process.env.NEXT_PUBLIC_REGISTRATION_API_URL ||
+  "https://sol-circle.vercel.app";
 declare global {
   interface Window {
     onTelegramAuth: (user: any) => void;
@@ -24,6 +28,8 @@ export default function RegisterPage() {
   const { setVisible } = useWalletModal();
   const [step, setStep] = useState(1);
   const [walletAddress, setWalletAddress] = useState("");
+  const [manualWalletAddress, setManualWalletAddress] = useState("");
+  const [useManualInput, setUseManualInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [registrationData, setRegistrationData] = useState<any>(null);
@@ -49,28 +55,23 @@ export default function RegisterPage() {
       setError("");
 
       try {
-        const response = await fetch("/api/users", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            id: user.id,
-            username: user.username,
-            first_name: user.first_name,
-            last_name: user.last_name,
-            auth_date: user.auth_date,
-            hash: user.hash,
-            main_pkey: walletAddress,
-          }),
+        const response = await api.post("/api/users", {
+          id: user.id,
+          username: user.username,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          auth_date: user.auth_date,
+          hash: user.hash,
+          main_pkey: walletAddress,
         });
 
-        const data = await response.json();
+        const data = response.data;
 
         if (data.success) {
           setRegistrationData(data.data);
 
-          const userData = {
+          // Store user data in localStorage (JWT token is in httpOnly cookie)
+          const userData: UserData = {
             walletAddress: data.data.wallets.main.publicKey,
             telegramHandle: data.data.telegram.username,
             telegramId: data.data.telegram.userId,
@@ -80,15 +81,15 @@ export default function RegisterPage() {
             groups: data.data.groups,
             telegramusername: data.data.telegram.username,
           };
-          localStorage.setItem("solana_vote_user", JSON.stringify(userData));
+          setUserData(userData);
 
           setStep(3);
         } else {
           setError(data.error || "Registration failed");
         }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        setError(msg || "Network error during registration");
+      } catch (err: any) {
+        const msg = err.response?.data?.error || err.message || "Network error during registration";
+        setError(msg);
       } finally {
         setLoading(false);
       }
@@ -124,6 +125,29 @@ export default function RegisterPage() {
     };
   }, [step]);
 
+  const validateSolanaAddress = (address: string): boolean => {
+    // Basic Solana address validation (32-44 characters, base58)
+    const solanaAddressRegex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+    return solanaAddressRegex.test(address);
+  };
+
+  const handleManualWalletSubmit = () => {
+    setError("");
+    
+    if (!manualWalletAddress.trim()) {
+      setError("Please enter a wallet address");
+      return;
+    }
+
+    if (!validateSolanaAddress(manualWalletAddress.trim())) {
+      setError("Invalid Solana wallet address. Please check and try again.");
+      return;
+    }
+
+    setWalletAddress(manualWalletAddress.trim());
+    setStep(2);
+  };
+
   const handleConnectWallet = async () => {
     if (!connected) {
       setVisible(true);
@@ -149,10 +173,10 @@ export default function RegisterPage() {
 
   return (
     <>
-      {/* keep site visual continuity: animated GL background (header intentionally removed) */}
       <GL hovering={hovering} />
+      <Header />
 
-      <main className="min-h-screen bg-background text-foreground overflow-hidden flex flex-col pt-[92px]">
+      <main className="min-h-screen bg-background text-foreground overflow-hidden flex flex-col pt-24 md:pt-32">
         <div className="container relative z-10 flex-1 flex items-center justify-center px-6 py-12">
           <div className="w-full max-w-md">
             {/* Back + step row preserved but now inside site container for consistency */}
@@ -198,7 +222,7 @@ export default function RegisterPage() {
                 </div>
 
                 <div className="space-y-4">
-                  {connected && publicKey ? (
+                  {connected && publicKey && !useManualInput ? (
                     <div className="space-y-4">
                       <div className="p-4 bg-card border border-border rounded-lg">
                         <p className="text-xs text-muted-foreground mb-2">
@@ -227,24 +251,80 @@ export default function RegisterPage() {
                         )}
                       </button>
                     </div>
+                  ) : useManualInput ? (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground">
+                          Enter your Solana wallet address
+                        </label>
+                        <input
+                          type="text"
+                          value={manualWalletAddress}
+                          onChange={(e) => setManualWalletAddress(e.target.value)}
+                          placeholder="e.g., 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+                          className="w-full px-4 py-3 bg-card border border-border rounded-lg font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                        />
+                      </div>
+                      
+                      <button
+                        onClick={handleManualWalletSubmit}
+                        disabled={loading || !manualWalletAddress.trim()}
+                        className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-bold hover:bg-primary/90 transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        <Send className="w-4 h-4" />
+                        <span>Continue to Telegram</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setUseManualInput(false);
+                          setManualWalletAddress("");
+                          setError("");
+                        }}
+                        className="w-full py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Or connect wallet extension instead
+                      </button>
+                    </div>
                   ) : (
-                    <button
-                      onClick={() => setVisible(true)}
-                      disabled={connecting}
-                      className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-bold hover:bg-primary/90 transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                      {connecting ? (
-                        <>
-                          <span className="inline-block w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                          <span>Connecting...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Wallet className="w-4 h-4" />
-                          <span>Connect Wallet</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="space-y-4">
+                      <button
+                        onClick={() => setVisible(true)}
+                        disabled={connecting}
+                        className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-bold hover:bg-primary/90 transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {connecting ? (
+                          <>
+                            <span className="inline-block w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                            <span>Connecting...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Wallet className="w-4 h-4" />
+                            <span>Connect Wallet</span>
+                          </>
+                        )}
+                      </button>
+
+                      <div className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                          <div className="w-full border-t border-border"></div>
+                        </div>
+                        <div className="relative flex justify-center text-xs">
+                          <span className="bg-background px-2 text-muted-foreground">
+                            OR
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => setUseManualInput(true)}
+                        className="w-full py-3 border-2 border-border text-foreground rounded-lg font-bold hover:border-primary/50 hover:bg-card transition-colors duration-300 flex items-center justify-center gap-2"
+                      >
+                        <KeyRound className="w-4 h-4" />
+                        <span>Enter Wallet Address Manually</span>
+                      </button>
+                    </div>
                   )}
                   
                   {error && (

@@ -6,6 +6,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { LogOut, Wallet, Send, X } from "lucide-react"
 import { GL } from "@/components/gl"
+import { Header } from "@/components/header"
 import { useWallet, useConnection } from "@solana/wallet-adapter-react"
 import { useWalletModal } from "@solana/wallet-adapter-react-ui"
 import {
@@ -14,24 +15,14 @@ import {
   SystemProgram,
   LAMPORTS_PER_SOL
 } from "@solana/web3.js"
-
-interface UserData {
-  walletAddress: string
-  telegramHandle: string
-  telegramId: string
-  connectedAt: string
-  custodial_pub: string
-  custodial_balance: string
-  groups: any[]
-  telegramusername: string
-}
+import { getUserData, clearUserData, type UserData } from "@/lib/utils"
+import api from "@/lib/api"
 
 const TABS = [
   { key: "orders", label: "Current Orders" },
   { key: "proposals", label: "Last Proposals" },
+  { key: "browse", label: "Browse Groups" }, // acts as a button -> navigates to /groups
 ];
-
-const REGISTRATION_API_URL = process.env.NEXT_PUBLIC_REGISTRATION_API_URL || "";
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -58,13 +49,17 @@ export default function DashboardPage() {
   const [txError, setTxError] = useState("")
   const [txSuccess, setTxSuccess] = useState("")
 
+  // Authentication check - redirect to login if not authenticated
   useEffect(() => {
-    const stored = localStorage.getItem("solana_vote_user")
-    if (stored) {
-      setUserData(JSON.parse(stored))
-    } else {
-      router.push("/register")
+    const stored = getUserData()
+    if (!stored) {
+      // No user data found, redirect to login
+      router.push("/login")
+      return
     }
+    
+    // User is authenticated, load their data
+    setUserData(stored)
     setLoading(false)
     fetchCustodials()
   }, [router])
@@ -72,12 +67,11 @@ export default function DashboardPage() {
   async function fetchCustodials() {
     setCustLoading(true)
     try {
-      const telegram = JSON.parse(localStorage.getItem("solana_vote_user") || "{}").telegramHandle
-      const q = telegram ? `?telegram_user_id=${encodeURIComponent(telegram)}` : ""
-      const res = await fetch(`/api/custodial-wallets${q}`)
-      if (!res.ok) throw new Error("Failed to fetch custodials")
-      const data = await res.json()
-      setCustodials(data.wallets || [])
+      const userData = getUserData()
+      const telegram = userData?.telegramHandle
+      const params = telegram ? { telegram_user_id: telegram } : {}
+      const response = await api.get("/api/custodial-wallets", { params })
+      setCustodials(response.data.wallets || [])
     } catch (e) {
       // ignore
     } finally {
@@ -86,7 +80,7 @@ export default function DashboardPage() {
   }
 
   const handleLogout = () => {
-    localStorage.removeItem("solana_vote_user")
+    clearUserData()
     router.push("/")
   }
 
@@ -154,19 +148,13 @@ export default function DashboardPage() {
 
     try {
       // Call your backend API to initiate withdrawal from custodial wallet
-      const response = await fetch(`${REGISTRATION_API_URL}/api/withdraw`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          telegram_user_id: userData?.telegramHandle,
-          amount: parseFloat(amount),
-          destination: publicKey.toString(),
-        }),
+      const response = await api.post("/api/withdraw", {
+        telegram_user_id: userData?.telegramHandle,
+        amount: parseFloat(amount),
+        destination: publicKey.toString(),
       })
 
-      const data = await response.json()
+      const data = response.data
 
       if (data.success) {
         setTxSuccess(`Successfully withdrew ${amount} SOL!`)
@@ -182,7 +170,8 @@ export default function DashboardPage() {
       }
     } catch (error: any) {
       console.error("Withdraw error:", error)
-      setTxError(error.message || "Withdrawal failed")
+      const msg = error.response?.data?.error || error.message || "Withdrawal failed"
+      setTxError(msg)
     } finally {
       setTxLoading(false)
     }
@@ -190,20 +179,33 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!userData) return;
+
     if (activeTab === "orders") {
       setOrdersLoading(true);
-      fetch(`${REGISTRATION_API_URL}/api/orders?telegram_user_id=${encodeURIComponent(userData.telegramHandle)}`)
-        .then(res => res.json())
-        .then(data => {
-          setOrders(data.data || []);
+      api.get(`/api/orders/user/${encodeURIComponent(userData.telegramId)}`)
+        .then((response) => {
+          const data = response.data;
+          if (data?.success) {
+            setOrders(data.data || []);
+          } else {
+            setOrders([]);
+            console.warn("Failed to load orders:", data?.error);
+          }
+        })
+        .catch((err) => {
+          console.error("Orders fetch error:", err);
+          setOrders([]);
         })
         .finally(() => setOrdersLoading(false));
     } else if (activeTab === "proposals") {
       setProposalsLoading(true);
-      fetch(`${REGISTRATION_API_URL}/api/proposals/participated/${encodeURIComponent(userData.telegramId)}`)
-        .then(res => res.json())
-        .then(data => {
-          setProposals(data.data || []);
+      api.get(`/api/proposals/participated/${encodeURIComponent(userData.telegramId)}`)
+        .then((response) => {
+          setProposals(response.data.data || []);
+        })
+        .catch((err) => {
+          console.error("Proposals fetch error:", err);
+          setProposals([]);
         })
         .finally(() => setProposalsLoading(false));
     }
@@ -224,6 +226,7 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen">
       <GL hovering={hovering} />
+      <Header />
 
       {/* Grid Background */}
       <div className="fixed inset-0 pointer-events-none">
@@ -239,30 +242,8 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Header */}
-      <div className="relative z-10 flex items-center justify-between px-6 md:px-12 py-6 border-b border-border">
-        <Link href="/" className="flex items-center gap-3">
-          <Image
-            src="/assets/logo.png"
-            alt="SolCircle Logo"
-            width={40}
-            height={40}
-          />
-          <span className="text-xl font-sentient font-bold tracking-tight">
-            SolCircle
-          </span>
-        </Link>
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-2 px-4 py-2 font-mono text-sm text-red-400 hover:bg-red-950/30 border border-red-500/30 rounded-lg transition-all"
-        >
-          <LogOut className="w-4 h-4" />
-          Logout
-        </button>
-      </div>
-
       {/* Main Content */}
-      <div className="relative z-10 px-6 md:px-12 py-12 max-w-7xl mx-auto">
+      <div className="relative z-10 px-6 md:px-12 py-12 pt-24 md:pt-32 max-w-7xl mx-auto">
         <div className="space-y-8">
           {/* Welcome Section */}
           <div>
@@ -370,7 +351,13 @@ export default function DashboardPage() {
                       ? "bg-primary text-primary-foreground"
                       : "bg-background border border-border text-foreground hover:border-primary/30"
                   }`}
-                  onClick={() => setActiveTab(tab.key)}
+                  onClick={() => {
+                    if (tab.key === "browse") {
+                      router.push("/groups");
+                    } else {
+                      setActiveTab(tab.key);
+                    }
+                  }}
                   onMouseEnter={() => setHovering(true)}
                   onMouseLeave={() => setHovering(false)}
                 >

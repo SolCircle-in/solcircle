@@ -1,27 +1,61 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn, getUserData, clearUserData } from "@/lib/utils";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Menu, X } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
 
 interface MobileMenuProps {
   className?: string;
 }
 
 export const MobileMenu = ({ className }: MobileMenuProps) => {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    // Initial check
+    const checkAuth = () => {
+      const userData = getUserData();
+      setIsLoggedIn(!!userData);
+    };
+    
+    checkAuth();
+
+    // Listen for storage changes
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "solana_vote_user") {
+        checkAuth();
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("focus", checkAuth);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("focus", checkAuth);
+    };
+  }, []);
 
   const menuItems = [
-    { name: "Stats", href: "#stats" },
-    { name: "Feature", href: "#feature" },
     { name: "Contact", href: "#contact" },
     { name: "Groups", href: "/groups" },
+    ...(isLoggedIn ? [{ name: "Dashboard", href: "/dashboard" }] : []),
   ];
 
   const handleLinkClick = () => {
     setIsOpen(false);
+  };
+
+  const handleLogout = () => {
+    clearUserData();
+    setIsLoggedIn(false);
+    setIsOpen(false);
+    router.push("/");
   };
 
   return (
@@ -71,13 +105,22 @@ export const MobileMenu = ({ className }: MobileMenuProps) => {
             ))}
 
             <div className="mt-6">
-              <Link
-                href="/#sign-in"
-                onClick={handleLinkClick}
-                className="inline-block text-xl font-mono uppercase text-primary transition-colors ease-out duration-150 hover:text-primary/80 py-2"
-              >
-                Sign In
-              </Link>
+              {isLoggedIn ? (
+                <button
+                  onClick={handleLogout}
+                  className="inline-block text-xl font-mono uppercase text-primary transition-colors ease-out duration-150 hover:text-primary/80 py-2"
+                >
+                  Logout
+                </button>
+              ) : (
+                <Link
+                  href="/login"
+                  onClick={handleLinkClick}
+                  className="inline-block text-xl font-mono uppercase text-primary transition-colors ease-out duration-150 hover:text-primary/80 py-2"
+                >
+                  Log In
+                </Link>
+              )}
             </div>
           </nav>
         </Dialog.Content>

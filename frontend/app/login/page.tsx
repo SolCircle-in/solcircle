@@ -6,6 +6,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Check, UserCircle } from "lucide-react";
 import { GL } from "@/components/gl";
+import { Header } from "@/components/header";
+import { setUserData, type UserData } from "@/lib/utils";
+import api from "@/lib/api";
 
 // Declare Telegram widget callback as global
 declare global {
@@ -30,31 +33,22 @@ export default function LoginPage() {
       setError("");
 
       try {
-        const response = await fetch(
-          "https://sol-circle.vercel.app/api/users/login",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              id: user.id,
-              username: user.username,
-              first_name: user.first_name,
-              last_name: user.last_name,
-              auth_date: user.auth_date,
-              hash: user.hash,
-            }),
-          }
-        );
+        const response = await api.post("/api/users/login", {
+          id: user.id,
+          username: user.username,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          auth_date: user.auth_date,
+          hash: user.hash,
+        });
 
-        const data = await response.json();
+        const data = response.data;
 
         if (data.success) {
           setLoginData(data.data);
 
-          // Store user data
-          const userData = {
+          // Store user data in both localStorage and cookies
+          const userData: UserData = {
             walletAddress: data.data.wallets.main.publicKey,
             telegramHandle: data.data.telegram.username,
             telegramId: data.data.telegram.userId,
@@ -64,7 +58,7 @@ export default function LoginPage() {
             groups: data.data.groups,
             telegramusername: data.data.telegram.username,
           };
-          localStorage.setItem("solana_vote_user", JSON.stringify(userData));
+          setUserData(userData);
 
           setStep(2);
         } else {
@@ -77,9 +71,9 @@ export default function LoginPage() {
             setError(data.error || "Login failed");
           }
         }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        setError(msg || "Network error during login");
+      } catch (err: any) {
+        const msg = err.response?.data?.error || err.message || "Network error during login";
+        setError(msg);
       } finally {
         setLoading(false);
       }
@@ -132,6 +126,7 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen flex flex-col">
       <GL hovering={hovering} />
+      <Header />
 
       {/* Grid Background */}
       <div className="fixed inset-0 pointer-events-none">
@@ -147,37 +142,9 @@ export default function LoginPage() {
         />
       </div>
 
-      {/* Header */}
-      <div className="relative z-10 flex items-center justify-between px-6 md:px-12 py-6">
-        <Link
-          href="/"
-          className="flex items-center gap-2 text-foreground/60 hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-          <span className="font-mono text-sm">Back</span>
-        </Link>
-        <div className="flex items-center gap-3">
-          <Image
-            src="/solcircle.png"
-            alt="SolCircle Logo"
-            width={40}
-            height={40}
-          />
-          <span className="text-xl font-sentient font-bold tracking-tight">
-            SolCircle
-          </span>
-        </div>
-        <Link
-          href="/register"
-          className="font-mono text-sm text-primary hover:text-primary/80 transition-colors"
-        >
-          Register
-        </Link>
-      </div>
-
       {/* Main Content */}
-      <div className="relative z-10 flex-1 flex items-center justify-center px-6 py-12">
-        <div className="w-full max-w-md">
+      <div className="relative z-10 flex-1 flex items-center justify-center px-6 py-12 pt-24 md:pt-32">
+        <div className="w-full max-w-lg">
           {step === 1 && (
             <div className="space-y-8">
               <div className="text-center space-y-4">

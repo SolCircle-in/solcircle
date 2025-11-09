@@ -84,14 +84,74 @@ body {
 #webgl {
   top: 0;
   left: 0;
-  position: fixed;
-  height: 100svh;
+  position: absolute;
+  height: 100%;
   width: 100%;
 }
 
 #webgl canvas {
   width: 100%;
   height: 100%;
+}
+
+/* Infinite Slider Animations */
+@keyframes slide-horizontal {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-100% - var(--gap)));
+  }
+}
+
+@keyframes slide-horizontal-reverse {
+  from {
+    transform: translateX(calc(-100% - var(--gap)));
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-vertical {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(calc(-100% - var(--gap)));
+  }
+}
+
+@keyframes slide-vertical-reverse {
+  from {
+    transform: translateY(calc(-100% - var(--gap)));
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-horizontal {
+  animation: slide-horizontal var(--duration) linear infinite;
+}
+
+.animate-slide-horizontal-reverse {
+  animation: slide-horizontal-reverse var(--duration) linear infinite;
+}
+
+.animate-slide-vertical {
+  animation: slide-vertical var(--duration) linear infinite;
+}
+
+.animate-slide-vertical-reverse {
+  animation: slide-vertical-reverse var(--duration) linear infinite;
+}
+
+.group:hover .animate-slide-horizontal,
+.group:hover .animate-slide-horizontal-reverse,
+.group:hover .animate-slide-vertical,
+.group:hover .animate-slide-vertical-reverse {
+  animation-duration: var(--duration-on-hover);
 }
 
 

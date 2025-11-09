@@ -136,6 +136,10 @@ function createInitializeInstruction(poolPda, admin, tgId, programId) {
 router.post("/register", async (req, res) => {
   try {
     // Check if Solana config is loaded
+    console.log("test")
+    console.log("programId:", programId);
+    console.log("adminKeypair:", adminKeypair ? adminKeypair.publicKey.toString() : null);
+    
     if (!programId || !adminKeypair) {
       return res.status(503).json({
         success: false,
@@ -404,29 +408,127 @@ router.get("/", async (req, res) => {
 
     // Optionally enrich with Telegram group info (title, description, etc.)
     const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
-    
+
     if (botToken && req.query.includeGroupInfo === 'true') {
-      // Fetch Telegram info for each group
+      // Initialize Solana connection for holdings data
+      const connection = new Connection(
+        process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com"
+      );
+
+      // Fetch Telegram info and holdings for each group
       const enrichedGroups = await Promise.all(
         groups.map(async (group) => {
           try {
+            // Get Telegram chat info
             const chatInfo = await getChatInfo(botToken, group.tgid);
+
+            // Get wallet balance
+            let groupWalletBalance = 0;
+            try {
+              const balanceLamports = await connection.getBalance(
+                new PublicKey(group.relay_account)
+              );
+              groupWalletBalance = balanceLamports / 1e9;
+            } catch (err) {
+              console.error(`Error fetching wallet balance for group ${group.tgid}:`, err.message);
+            }
+
+            // Get active orders with token holdings
+            const activeOrdersResult = await query(
+              `SELECT
+                o.order_id,
+                o.token_symbol,
+                o.token_amount,
+                o.total_amount_spent,
+                o.bought_at_price,
+                o.status,
+                o.created_at,
+                SUM(uo.tokens_allocated) as total_tokens_held
+               FROM orders o
+               LEFT JOIN proposals p ON o.proposal_id = p.proposal_id
+               LEFT JOIN user_orders uo ON o.order_id = uo.order_id
+               WHERE p.tgid = $1 AND o.status = 'completed'
+               GROUP BY o.order_id, o.token_symbol, o.token_amount,
+                        o.total_amount_spent, o.bought_at_price, o.status, o.created_at
+               ORDER BY o.created_at DESC`,
+              [group.tgid]
+            );
+
+            // Aggregate holdings by token
+            const tokenHoldings = {};
+            activeOrdersResult.rows.forEach(order => {
+              const symbol = order.token_symbol;
+              if (!tokenHoldings[symbol]) {
+                tokenHoldings[symbol] = {
+                  token_symbol: symbol,
+                  total_tokens: 0,
+                  total_invested: 0,
+                  order_count: 0,
+                  orders: []
+                };
+              }
+
+              tokenHoldings[symbol].total_tokens += parseFloat(order.total_tokens_held || order.token_amount);
+              tokenHoldings[symbol].total_invested += parseFloat(order.total_amount_spent);
+              tokenHoldings[symbol].order_count += 1;
+              tokenHoldings[symbol].orders.push({
+                order_id: order.order_id,
+                tokens: parseFloat(order.total_tokens_held || order.token_amount),
+                invested: parseFloat(order.total_amount_spent),
+                bought_at_price: parseFloat(order.bought_at_price),
+                date: order.created_at
+              });
+            });
+
+            // Get sold orders statistics
+            const soldOrdersResult = await query(
+              `SELECT
+                COUNT(*) as sold_count,
+                SUM(o.total_amount_spent) as total_sold_value
+               FROM orders o
+               LEFT JOIN proposals p ON o.proposal_id = p.proposal_id
+               WHERE p.tgid = $1 AND o.status = 'sold'`,
+              [group.tgid]
+            );
+
+            // Calculate statistics
+            const statistics = {
+              total_sol_invested: activeOrdersResult.rows.reduce(
+                (sum, order) => sum + parseFloat(order.total_amount_spent),
+                0
+              ),
+              total_active_orders: activeOrdersResult.rows.length,
+              total_sold_orders: parseInt(soldOrdersResult.rows[0]?.sold_count || 0),
+              unique_tokens: Object.keys(tokenHoldings).length,
+              total_pnl: parseFloat(group.total_pnl || 0) // Group's total profit/loss
+            };
+
+            // Build enriched group object
+            const enrichedGroup = {
+              ...group,
+              wallet_balance_sol: groupWalletBalance.toFixed(4),
+              wallet_balance_lamports: groupWalletBalance * 1e9,
+              statistics,
+              token_holdings: Object.values(tokenHoldings),
+              network: "devnet"
+            };
+
+            // Add Telegram info if available
             if (chatInfo.success) {
-              return {
-                ...group,
-                telegram: {
-                  title: chatInfo.title,
-                  description: chatInfo.description,
-                  username: chatInfo.username,
-                  memberCount: chatInfo.memberCount,
-                  type: chatInfo.type,
-                },
+              enrichedGroup.telegram = {
+                title: chatInfo.title,
+                description: chatInfo.description,
+                username: chatInfo.username,
+                memberCount: chatInfo.memberCount,
+                type: chatInfo.type,
               };
             }
+
+            return enrichedGroup;
           } catch (err) {
-            console.error(`Failed to get info for group ${group.tgid}:`, err.message);
+            console.error(`Failed to enrich group ${group.tgid}:`, err.message);
+            return group;
           }
-          return group;
         })
       );
 
@@ -560,6 +662,169 @@ router.get("/:tgid/bot-permissions", async (req, res) => {
   }
 });
 
+// Get comprehensive group details (group info + orders + holdings in one call)
+// GET /api/groups/:tgid/details
+router.get("/:tgid/details", async (req, res) => {
+  try {
+    const { tgid } = req.params;
+
+    // Check if group exists
+    const groupResult = await query("SELECT * FROM groups WHERE tgid = $1", [tgid]);
+
+    if (groupResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Group not found",
+      });
+    }
+
+    const group = groupResult.rows[0];
+
+    // Get Telegram info
+    const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+    if (botToken) {
+      try {
+        const chatInfo = await getChatInfo(botToken, tgid);
+        if (chatInfo.success) {
+          group.telegram = {
+            title: chatInfo.title,
+            description: chatInfo.description,
+            username: chatInfo.username,
+            memberCount: chatInfo.memberCount,
+            type: chatInfo.type,
+          };
+        }
+      } catch (err) {
+        console.error(`Failed to get Telegram info for group ${tgid}:`, err.message);
+      }
+    }
+
+    // Get wallet balance
+    const connection = new Connection(
+      process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com",
+      "confirmed"
+    );
+
+    let groupWalletBalance = 0;
+    try {
+      const balanceLamports = await connection.getBalance(
+        new PublicKey(group.relay_account)
+      );
+      groupWalletBalance = balanceLamports / 1e9;
+    } catch (err) {
+      console.error("Error fetching group wallet balance:", err.message);
+    }
+
+    // Get active orders with token holdings
+    const activeOrdersResult = await query(
+      `SELECT
+        o.order_id,
+        o.token_symbol,
+        o.token_amount,
+        o.total_amount_spent,
+        o.bought_at_price,
+        o.status,
+        o.created_at,
+        SUM(uo.tokens_allocated) as total_tokens_held
+       FROM orders o
+       LEFT JOIN proposals p ON o.proposal_id = p.proposal_id
+       LEFT JOIN user_orders uo ON o.order_id = uo.order_id
+       WHERE p.tgid = $1 AND o.status = 'completed'
+       GROUP BY o.order_id, o.token_symbol, o.token_amount,
+                o.total_amount_spent, o.bought_at_price, o.status, o.created_at
+       ORDER BY o.created_at DESC`,
+      [tgid]
+    );
+
+    // Aggregate holdings by token
+    const tokenHoldings = {};
+    activeOrdersResult.rows.forEach(order => {
+      const symbol = order.token_symbol;
+      if (!tokenHoldings[symbol]) {
+        tokenHoldings[symbol] = {
+          token_symbol: symbol,
+          total_tokens: 0,
+          total_invested: 0,
+          order_count: 0,
+          orders: []
+        };
+      }
+
+      tokenHoldings[symbol].total_tokens += parseFloat(order.total_tokens_held || order.token_amount);
+      tokenHoldings[symbol].total_invested += parseFloat(order.total_amount_spent);
+      tokenHoldings[symbol].order_count += 1;
+      tokenHoldings[symbol].orders.push({
+        order_id: order.order_id,
+        tokens: parseFloat(order.total_tokens_held || order.token_amount),
+        invested: parseFloat(order.total_amount_spent),
+        bought_at_price: parseFloat(order.bought_at_price),
+        date: order.created_at
+      });
+    });
+
+    // Get sold orders statistics
+    const soldOrdersResult = await query(
+      `SELECT
+        COUNT(*) as sold_count,
+        SUM(o.total_amount_spent) as total_sold_value
+       FROM orders o
+       LEFT JOIN proposals p ON o.proposal_id = p.proposal_id
+       WHERE p.tgid = $1 AND o.status = 'sold'`,
+      [tgid]
+    );
+
+    // Calculate statistics
+    const statistics = {
+      total_sol_invested: activeOrdersResult.rows.reduce(
+        (sum, order) => sum + parseFloat(order.total_amount_spent),
+        0
+      ),
+      total_active_orders: activeOrdersResult.rows.length,
+      total_sold_orders: parseInt(soldOrdersResult.rows[0]?.sold_count || 0),
+      unique_tokens: Object.keys(tokenHoldings).length,
+      total_pnl: parseFloat(group.total_pnl || 0) // Group's total profit/loss
+    };
+
+    // Get all orders for this group
+    const ordersResult = await query(
+      `SELECT
+        o.*,
+        p.tgid,
+        COUNT(DISTINCT uo.utgid) as participant_count
+       FROM orders o
+       LEFT JOIN proposals p ON o.proposal_id = p.proposal_id
+       LEFT JOIN user_orders uo ON o.order_id = uo.order_id
+       WHERE p.tgid = $1
+       GROUP BY o.order_id, o.proposal_id, o.transaction_hash,
+                o.token_symbol, o.total_amount_spent, o.token_amount,
+                o.fees, o.executed_by, o.status, o.created_at, p.tgid
+       ORDER BY o.created_at DESC`,
+      [tgid]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        group: {
+          ...group,
+          wallet_balance_sol: groupWalletBalance.toFixed(4),
+          wallet_balance_lamports: groupWalletBalance * 1e9,
+        },
+        statistics,
+        token_holdings: Object.values(tokenHoldings),
+        orders: ordersResult.rows,
+        network: "devnet"
+      }
+    });
+  } catch (error) {
+    console.error("Get group details error:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 // Get group by ID
 router.get("/:tgid", async (req, res) => {
   try {
@@ -577,7 +842,7 @@ router.get("/:tgid", async (req, res) => {
 
     // Optionally include Telegram group info
     const botToken = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
-    
+
     if (botToken && req.query.includeGroupInfo === 'true') {
       try {
         const chatInfo = await getChatInfo(botToken, tgid);

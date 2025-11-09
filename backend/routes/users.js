@@ -4,7 +4,8 @@ const { query } = require("../db/queries");
 const { createCustodialWallet, encryptPrivateKey } = require("../utils/wallet");
 const { Connection, PublicKey } = require("@solana/web3.js");
 const axios = require("axios");
-const crypto = require("crypto"); 
+const crypto = require("crypto");
+const jwt = require("jsonwebtoken"); 
 /**
  * Register a new user
  * POST /api/users
@@ -255,7 +256,7 @@ router.post("/login", async (req, res) => {
 
     // Check if user exists
     const existingUser = await query(
-      "SELECT utgid, username, custodial_pkey, main_pkey, status, created_at FROM users WHERE utgid = $1",
+      "SELECT utgid, username, custodial_pkey, main_pkey, status, created_at, total_pnl FROM users WHERE utgid = $1",
       [telegramUserId]
     );
 
@@ -306,6 +307,25 @@ router.post("/login", async (req, res) => {
       [telegramUserId]
     );
 
+    // Generate JWT token
+    const jwtSecret = process.env.JWT_SECRET || "your-secret-key-change-in-production";
+    const token = jwt.sign(
+      {
+        id: user.utgid,
+        username: user.username,
+      },
+      jwtSecret,
+      { expiresIn: "7d" }
+    );
+
+    // Set token in httpOnly cookie
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production", // HTTPS in production
+      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax", // lax for development
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+    });
+
     res.status(200).json({
       success: true,
       message: "✅ Login successful",
@@ -330,6 +350,7 @@ router.post("/login", async (req, res) => {
           count: groupsResult.rows.length,
           list: groupsResult.rows,
         },
+        total_pnl: parseFloat(user.total_pnl || 0), // User's total profit/loss
         status: user.status,
         memberSince: user.created_at,
       },
@@ -500,183 +521,7 @@ router.post("/verify-otp", async (req, res) => {
   }
 });
 
-// Get all users
-router.get("/", async (req, res) => {
-  try {
-    const result = await query(
-      "SELECT utgid, username, custodial_pkey, main_pkey, status, created_at FROM users ORDER BY created_at DESC"
-    );
-    res.json({
-      success: true,
-      count: result.rows.length,
-      data: result.rows,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-// Get user by ID or username
-router.get("/:identifier", async (req, res) => {
-  try {
-    const { identifier } = req.params;
-
-    // Try both utgid and username
-    const result = await query(
-      "SELECT utgid, username, custodial_pkey, main_pkey, status, created_at FROM users WHERE utgid = $1 OR username = $1",
-      [identifier]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: "User not found",
-      });
-    }
-
-    const user = result.rows[0];
-
-    // Get balances
-    const connection = new Connection("https://api.devnet.solana.com/");
-    let custodialBalance = 0;
-    let mainBalance = 0;
-
-    try {
-      const custodialBalanceLamports = await connection.getBalance(
-        new PublicKey(user.custodial_pkey)
-      );
-      custodialBalance = custodialBalanceLamports / 1e9;
-
-      const mainBalanceLamports = await connection.getBalance(
-        new PublicKey(user.main_pkey)
-      );
-      mainBalance = mainBalanceLamports / 1e9;
-    } catch (error) {
-      console.error("Error fetching balances:", error.message);
-    }
-
-    res.json({
-      success: true,
-      data: {
-        telegram: {
-          userId: user.utgid,
-          username: user.username,
-        },
-        wallets: {
-          custodial: {
-            publicKey: user.custodial_pkey,
-            balance: custodialBalance,
-            balanceSOL: `${custodialBalance} SOL`,
-          },
-          main: {
-            publicKey: user.main_pkey,
-            balance: mainBalance,
-            balanceSOL: `${mainBalance} SOL`,
-          },
-        },
-        status: user.status,
-        createdAt: user.created_at,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-// Update user
-router.put("/:utgid", async (req, res) => {
-  try {
-    const { utgid } = req.params;
-    const { main_pkey, status, username } = req.body;
-
-    const result = await query(
-      `UPDATE users 
-       SET main_pkey = COALESCE($1, main_pkey),
-           status = COALESCE($2, status),
-           username = COALESCE($3, username)
-       WHERE utgid = $4
-       RETURNING utgid, username, custodial_pkey, main_pkey, status, created_at`,
-      [main_pkey, status, username, utgid]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: "User not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: result.rows[0],
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-// Get user's groups
-router.get("/:utgid/groups", async (req, res) => {
-  try {
-    const { utgid } = req.params;
-    const result = await query(
-      `SELECT g.*, p.role, p.joined_at
-       FROM participants p
-       JOIN groups g ON p.tgid = g.tgid
-       WHERE p.utgid = $1 AND p.left_at IS NULL
-       ORDER BY p.joined_at DESC`,
-      [utgid]
-    );
-
-    res.json({
-      success: true,
-      count: result.rows.length,
-      data: result.rows,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-// Get user's orders
-// router.get("/:utgid/orders", async (req, res) => {
-//   try {
-//     const { utgid } = req.params;
-//     const result = await query(
-//       `SELECT uo.*, o.token_symbol, o.transaction_hash, o.status as order_status, o.created_at as order_created_at
-//        FROM user_orders uo
-//        JOIN orders o ON uo.order_id = o.order_id
-//        WHERE uo.utgid = $1
-//        ORDER BY uo.created_at DESC`,
-//       [utgid]
-//     );
-
-//     res.json({
-//       success: true,
-//       count: result.rows.length,
-//       data: result.rows,
-//     });
-//   } catch (error) {
-//     res.status(500).json({
-//       success: false,
-//       error: error.message,
-//     });
-//   }
-// });
-
-// Get user wallet balance
+// Get user wallet balance (must come before /:identifier to avoid conflicts)
 router.get("/:utgid/balance", async (req, res) => {
   try {
     const { utgid } = req.params;
@@ -730,9 +575,33 @@ router.get("/:utgid/balance", async (req, res) => {
   }
 });
 
-// ...existing code...
+// Get user's groups (must come before /:identifier)
+router.get("/:utgid/groups", async (req, res) => {
+  try {
+    const { utgid } = req.params;
+    const result = await query(
+      `SELECT g.*, p.role, p.joined_at
+       FROM participants p
+       JOIN groups g ON p.tgid = g.tgid
+       WHERE p.utgid = $1 AND p.left_at IS NULL
+       ORDER BY p.joined_at DESC`,
+      [utgid]
+    );
 
-// Get user's orders and trading history
+    res.json({
+      success: true,
+      count: result.rows.length,
+      data: result.rows,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// Get user's orders and trading history (must come before /:identifier)
 router.get("/:userId/orders", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -754,7 +623,7 @@ router.get("/:userId/orders", async (req, res) => {
 
     // Get all user_orders with order details
     const result = await query(
-      `SELECT 
+      `SELECT
         uo.*,
         o.token_symbol,
         o.transaction_hash,
@@ -794,7 +663,139 @@ router.get("/:userId/orders", async (req, res) => {
   }
 });
 
-// ...existing code...
+// Get all users
+router.get("/", async (req, res) => {
+  try {
+    const result = await query(
+      "SELECT utgid, username, custodial_pkey, main_pkey, status, created_at FROM users ORDER BY created_at DESC"
+    );
+    res.json({
+      success: true,
+      count: result.rows.length,
+      data: result.rows,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// Get user by ID or username (must come AFTER all specific routes like /balance, /groups, /orders)
+router.get("/:identifier", async (req, res) => {
+  try {
+    const { identifier } = req.params;
+
+    // Try both utgid and username
+    const result = await query(
+      "SELECT utgid, username, custodial_pkey, main_pkey, status, created_at, total_pnl FROM users WHERE utgid = $1 OR username = $1",
+      [identifier]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "User not found",
+      });
+    }
+
+    const user = result.rows[0];
+
+    // Get balances
+    const connection = new Connection("https://api.devnet.solana.com/");
+    let custodialBalance = 0;
+    let mainBalance = 0;
+
+    try {
+      const custodialBalanceLamports = await connection.getBalance(
+        new PublicKey(user.custodial_pkey)
+      );
+      custodialBalance = custodialBalanceLamports / 1e9;
+
+      const mainBalanceLamports = await connection.getBalance(
+        new PublicKey(user.main_pkey)
+      );
+      mainBalance = mainBalanceLamports / 1e9;
+    } catch (error) {
+      console.error("Error fetching balances:", error.message);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        telegram: {
+          userId: user.utgid,
+          username: user.username,
+        },
+        wallets: {
+          custodial: {
+            publicKey: user.custodial_pkey,
+            balance: custodialBalance,
+            balanceSOL: `${custodialBalance} SOL`,
+          },
+          main: {
+            publicKey: user.main_pkey,
+            balance: mainBalance,
+            balanceSOL: `${mainBalance} SOL`,
+          },
+        },
+        total_pnl: parseFloat(user.total_pnl || 0), // User's total profit/loss
+        status: user.status,
+        createdAt: user.created_at,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// Logout user
+router.post("/logout", (req, res) => {
+  res.clearCookie("token");
+  res.json({
+    success: true,
+    message: "Logged out successfully",
+  });
+});
+
+// Update user
+router.put("/:utgid", async (req, res) => {
+  try {
+    const { utgid } = req.params;
+    const { main_pkey, status, username } = req.body;
+
+    const result = await query(
+      `UPDATE users
+       SET main_pkey = COALESCE($1, main_pkey),
+           status = COALESCE($2, status),
+           username = COALESCE($3, username)
+       WHERE utgid = $4
+       RETURNING utgid, username, custodial_pkey, main_pkey, status, created_at`,
+      [main_pkey, status, username, utgid]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "User not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: result.rows[0],
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
 
 
 module.exports = router;
